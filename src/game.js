@@ -25458,13 +25458,103 @@ void main(){
         colliders: i,
         collidables: a,
         spawn: new E(r.spawn.x, 0.5, r.spawn.z),
+        nav: r.nav ? NavGraph(r.nav) : null,
       }
     );
   }
+  // 小型路網：節點＋邊，A* 找路
+  function NavGraph(def) {
+    const ids = Object.keys(def.nodes),
+      pts = ids.map((k) => new E(def.nodes[k][0], 0, def.nodes[k][1])),
+      adj = ids.map(() => []);
+    for (const e of def.edges.split(" ")) {
+      const [a, b] = e.split("-").map((k) => ids.indexOf(k));
+      a >= 0 && b >= 0 && (adj[a].push(b), adj[b].push(a));
+    }
+    const nearest = (p) => {
+        let bi = 0,
+          bd = 1 / 0;
+        for (let i = 0; i < pts.length; i++) {
+          const d = (pts[i].x - p.x) ** 2 + (pts[i].z - p.z) ** 2;
+          d < bd && ((bd = d), (bi = i));
+        }
+        return bi;
+      },
+      path = (from, to) => {
+        const n = pts.length,
+          g = new Array(n).fill(1 / 0),
+          prev = new Array(n).fill(-1),
+          open = new Set([from]);
+        g[from] = 0;
+        const h = (i) => pts[i].distanceTo(pts[to]);
+        for (; open.size; ) {
+          let c = -1,
+            cf = 1 / 0;
+          for (const i of open) g[i] + h(i) < cf && ((cf = g[i] + h(i)), (c = i));
+          if (c === to) break;
+          open.delete(c);
+          for (const nb of adj[c]) {
+            const ng = g[c] + pts[c].distanceTo(pts[nb]) * (0.85 + Math.random() * 0.3);
+            ng < g[nb] && ((g[nb] = ng), (prev[nb] = c), open.add(nb));
+          }
+        }
+        const out = [];
+        for (let c = to; c >= 0; c = prev[c]) out.unshift(c);
+        return out[0] === from ? out : [to];
+      };
+    const routes = (def.routes || []).map((r) => r.split(" ").map((k) => ids.indexOf(k)).filter((i) => i >= 0)),
+      w = def.routeWeights || routes.map(() => 1),
+      wsum = w.reduce((a, b) => a + b, 0);
+    return {
+      ids,
+      pts,
+      adj,
+      nearest,
+      path,
+      routes,
+      pickRoute(team) {
+        let r = Math.random() * wsum,
+          k = 0;
+        for (; k < w.length - 1 && (r -= w[k]) > 0; k++);
+        const route = routes[k] ? routes[k].slice() : [];
+        return team === "red" ? route.reverse() : route;
+      },
+    };
+  }
+  // 貨櫃：程序化的波浪鋼板＋鏽斑貼圖，依顏色快取材質
+  const PaintCache = new Map();
+  let PaintTex = null;
+  function paintMat(hex) {
+    let m = PaintCache.get(hex);
+    if (m) return m;
+    if (!PaintTex) {
+      const cv = document.createElement("canvas");
+      ((cv.width = 128), (cv.height = 128));
+      const g = cv.getContext("2d");
+      if (g) {
+        ((g.fillStyle = "#d8d8d8"), g.fillRect(0, 0, 128, 128));
+        for (let x = 0; x < 128; x += 16) {
+          const gr = g.createLinearGradient(x, 0, x + 16, 0);
+          (gr.addColorStop(0, "#9a9a9a"), gr.addColorStop(0.3, "#e8e8e8"), gr.addColorStop(0.7, "#cfcfcf"), gr.addColorStop(1, "#8a8a8a"));
+          ((g.fillStyle = gr), g.fillRect(x, 6, 16, 116));
+        }
+        ((g.fillStyle = "#7a7a7a"), g.fillRect(0, 0, 128, 6), g.fillRect(0, 122, 128, 6));
+        for (let i = 0; i < 140; i++)
+          ((g.fillStyle = `rgba(${90 + Math.random() * 40},${50 + Math.random() * 20},20,${Math.random() * 0.35})`),
+            g.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 5, 1 + Math.random() * 9));
+      }
+      ((PaintTex = new yh(cv)), (PaintTex.colorSpace = qt), (PaintTex.wrapS = PaintTex.wrapT = 1e3));
+    }
+    return ((m = new mt({ color: hex, map: PaintTex, roughness: 0.7, metalness: 0.35 })), PaintCache.set(hex, m), m);
+  }
   function lq(r, e, t, n, i) {
     const a = new Rt(r.sx, r.sy, r.sz);
-    sl.scaleUv(a, r.material, Math.max(r.sx, r.sz), Math.max(r.sy, Math.min(r.sx, r.sz)));
-    const s = new ot(a, i.get(r.material));
+    if (r.paint) {
+      const uv = a.getAttribute("uv"),
+        L = Math.max(r.sx, r.sz) / 2.4;
+      for (let o = 0; o < uv.count; o++) uv.setX(o, uv.getX(o) * Math.max(1, Math.round(L * 2)));
+    } else sl.scaleUv(a, r.material, Math.max(r.sx, r.sz), Math.max(r.sy, Math.min(r.sx, r.sz)));
+    const s = new ot(a, r.paint ? paintMat(r.paint) : i.get(r.material));
     (s.position.set(r.x, r.y, r.z),
       (s.castShadow = r.castShadow ?? !0),
       (s.receiveShadow = !0),
@@ -25536,7 +25626,7 @@ void main(){
     for (const t of r.placements) t.kind === "model" && e.add(t.model);
     return [...e];
   }
-  const Gt = 30,
+  const Gt = 36,
     Aq = 9,
     Oc = 6,
     Gn = [];
@@ -25551,14 +25641,14 @@ void main(){
     sz: Gt * 2 + 4,
     castShadow: !1,
   });
-  const Lc = 10;
+  const Lc = 6;
   for (const [r, e, t, n] of [
     [0, -Gt - 1, Gt * 2 + 4, 2],
     [0, Gt + 1, Gt * 2 + 4, 2],
     [-Gt - 1, 0, 2, Gt * 2 + 4],
     [Gt + 1, 0, 2, Gt * 2 + 4],
   ])
-    Gn.push({ kind: "box", material: "wall", x: r, y: Lc / 2, z: e, sx: t, sy: Lc, sz: n });
+    Gn.push({ kind: "box", material: "concrete", x: r, y: Lc / 2 - 0.15, z: e, sx: t, sy: Lc, sz: n });
   for (let r = -Gt + Oc / 2; r < Gt; r += Oc)
     Gn.push({ kind: "model", model: "Street_4Lane", x: r, z: 0, y: -0.15, collide: !0 });
   for (const r of [-1, 1]) {
@@ -25583,15 +25673,79 @@ void main(){
   ];
   for (const [r, e, t, n] of pq) Gn.push({ kind: "model", model: r, x: e, z: t, rot: n, collide: !0 });
   const hq = [
-    [-22, -5],
-    [-10, 5],
-    [-2, -6],
-    [8, 4],
-    [16, -5],
-    [25, 5],
-    [-26, 6],
-    [22, -6],
+    [-20, -10.6],
+    [20, 10.6],
+    [-14, 10.6],
+    [16, -10.6],
   ];
+  // ===== CS 式掩體配置：三條路線（北後巷／中央大街／南後巷），中路用貨櫃交錯擋住長視線 =====
+  const Cover = (x, z, sx, sy, sz, material, extra) =>
+    Gn.push({ kind: "box", material, x, y: sy / 2 - 0.15, z, sx, sy, sz, ...extra });
+  const Container = (x, z, along, color) =>
+    Cover(x, z, along ? 6.1 : 2.44, 2.6, along ? 2.44 : 6.1, "wood", { paint: color });
+  const Crate = (x, z, h = 1) => {
+    Cover(x, z, 1.2, 1.2, 1.2, "wood");
+    h > 1 && Cover(x, z, 1.2, 1.2, 1.2, "wood", { y: 1.65 });
+  };
+  const Barrier = (x, z, alongX) => Cover(x, z, alongX ? 3 : 0.6, 0.95, alongX ? 0.6 : 3, "concrete");
+  // 中路
+  (Container(-12, -5.95, !1, 0x8a3b26),
+    Container(12, 5.95, !1, 0x2c5a8a),
+    Container(0, 0, !1, 0x3f6b3a),
+    Barrier(-24, 5, !1),
+    Barrier(24, -5, !1),
+    Barrier(-6, 6.5, !1),
+    Barrier(6, -6.5, !1),
+    Crate(-18, -7, 2),
+    Crate(-16.8, -7),
+    Crate(18, 7, 2),
+    Crate(16.8, 7),
+    Crate(4, -10.5),
+    Crate(-4, 10.5),
+    Crate(-27, -8),
+    Crate(27, 8));
+  // 北後巷：中間一道牆只留一個門（咽喉點）
+  (Cover(0, -32, 0.8, 3.2, 8, "wall"),
+    Container(-14, -34.8, !0, 0x6e6a3c),
+    Container(15, -34.8, !0, 0x7a2f2a),
+    Crate(-24, -28.4),
+    Crate(-6.5, -34.6, 2),
+    Crate(6, -34.6),
+    Crate(22, -28.4, 2),
+    Crate(-30, -17),
+    Crate(28.5, -17, 2));
+  // 南後巷
+  (Cover(0, 32.5, 0.8, 3.2, 7, "wall"),
+    Container(14, 34.8, !0, 0x34556b),
+    Container(-14, 34.8, !0, 0x8a5a2a),
+    Crate(-24, 28.5, 2),
+    Crate(-8, 34.6),
+    Crate(24, 28.6),
+    Crate(6, 34.6, 2),
+    Crate(-26, 16),
+    Crate(-22, 22, 2),
+    Crate(22, 18, 2),
+    Crate(21, 24));
+  // AI 導航點：三條路線＋連通的小巷，電腦會分路包抄而不是全擠在大街上
+  const CityNav = {
+    nodes: {
+      BB: [-32, 0], A: [-24, 0], B: [-12, 0], C: [0, 6], D: [0, -6], E: [12, 0], F: [24, 0], RB: [32, 0],
+      WN: [-32, -20], NW: [-32, -31.5], N1: [-18, -31], N2: [-6.5, -28.5], Nd: [0, -26.6], N3: [11.5, -28.5], N4: [22, -31], NE: [32, -31.5], EN: [31.5, -20],
+      WS: [-28, 20], SW: [-32, 31], S1: [-18, 30.5], H2: [-0.5, 27.5], S2: [10, 31], SE: [32, 31], ES: [26, 20],
+      G1: [-6.5, -10], G3: [11.5, -10], H1: [-0.5, 10.5],
+    },
+    edges: "BB-A A-B B-C B-D C-E D-E E-F F-RB BB-WN WN-NW NW-N1 N1-N2 N2-Nd Nd-N3 N3-N4 N4-NE NE-EN EN-RB BB-WS WS-SW SW-S1 S1-H2 H2-S2 S2-SE SE-ES ES-RB B-G1 D-G1 G1-N2 D-G3 E-G3 G3-N3 C-H1 H1-H2",
+    // 由藍方基地走到紅方基地的完整路線；紅方反向走
+    routes: [
+      "BB WN NW N1 N2 Nd N3 N4 NE EN RB",
+      "BB A B C E F RB",
+      "BB A B D E F RB",
+      "BB WS SW S1 H2 S2 SE ES RB",
+      "BB A B G1 N2 Nd N3 G3 E F RB",
+      "BB A B C H1 H2 S2 SE ES RB",
+    ],
+    routeWeights: [3, 1.5, 1.5, 3, 1, 1],
+  };
   for (const [r, e] of hq) Gn.push({ kind: "model", model: "Prop_Planter_Single", x: r, z: e, collide: !0 });
   for (const [r, e] of [
     [-15, -3],
@@ -25626,8 +25780,9 @@ void main(){
         [0, 7],
       ],
       placements: Gn,
+      nav: CityNav,
     },
-    dq = { blue: { x: -25, z: 0, yaw: -Math.PI / 2 }, red: { x: 25, z: 0, yaw: Math.PI / 2 } },
+    dq = { blue: { x: -32, z: 0, yaw: -Math.PI / 2 }, red: { x: 32, z: 0, yaw: Math.PI / 2 } },
     Yc = Mt.camera.maxPitch;
   class uq {
     camera;
@@ -25819,55 +25974,98 @@ void main(){
       [0, 0],
     ];
   }
+  // 圓角方塊：讓背心、口袋、靴子不再像積木
+  function roundBoxGeo(seg = 4, r = 0.35) {
+    const g = new Rt(1, 1, 1, seg, seg, seg),
+      p = g.getAttribute("position"),
+      n = g.getAttribute("normal"),
+      lim = 0.5 - r,
+      v = new E(),
+      c = new E();
+    for (let i = 0; i < p.count; i++) {
+      (v.set(p.getX(i), p.getY(i), p.getZ(i)),
+        c.set(si.clamp(v.x, -lim, lim), si.clamp(v.y, -lim, lim), si.clamp(v.z, -lim, lim)));
+      const d = v.sub(c);
+      d.lengthSq() < 1e-8 ? d.set(n.getX(i), n.getY(i), n.getZ(i)) : d.normalize();
+      (p.setXYZ(i, c.x + d.x * r, c.y + d.y * r, c.z + d.z * r), n.setXYZ(i, d.x, d.y, d.z));
+    }
+    return g;
+  }
   const SoldierPrim = {
       box: new Rt(1, 1, 1),
+      rbox: roundBoxGeo(),
       sphere: new Io(1, 14, 10),
-      dome: new Io(1, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.55),
-      thigh: latheGeo(limbProfile(0.09, 0.07, 0.46)),
-      shin: latheGeo(limbProfile(0.07, 0.052, 0.44)),
-      upperArm: latheGeo(limbProfile(0.062, 0.05, 0.29)),
-      foreArm: latheGeo(limbProfile(0.054, 0.043, 0.27)),
+      ball: new Io(1, 10, 8),
+      dome: new Io(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      thigh: latheGeo(limbProfile(0.104, 0.074, 0.46), 14),
+      shin: latheGeo(limbProfile(0.074, 0.056, 0.44), 14),
+      upperArm: latheGeo(limbProfile(0.068, 0.055, 0.29)),
+      foreArm: latheGeo(limbProfile(0.058, 0.046, 0.27)),
       torso: latheGeo(
         [
           [0, 0],
-          [0.14, 0.005],
-          [0.155, 0.08],
-          [0.165, 0.22],
-          [0.185, 0.36],
-          [0.19, 0.43],
-          [0.165, 0.49],
-          [0.09, 0.535],
+          [0.145, 0.005],
+          [0.16, 0.08],
+          [0.17, 0.22],
+          [0.19, 0.35],
+          [0.2, 0.42],
+          [0.175, 0.48],
+          [0.09, 0.53],
           [0, 0.54],
+        ],
+        16,
+      ),
+      pelvis: latheGeo(
+        [
+          [0, -0.13],
+          [0.11, -0.115],
+          [0.155, -0.05],
+          [0.16, 0.04],
+          [0.145, 0.085],
+          [0, 0.09],
         ],
         14,
       ),
-      pelvis: latheGeo([
-        [0, -0.13],
-        [0.1, -0.115],
-        [0.15, -0.05],
-        [0.155, 0.04],
-        [0.14, 0.08],
-        [0, 0.085],
-      ]),
       neck: latheGeo([
         [0, 0],
-        [0.056, 0.005],
-        [0.05, 0.11],
+        [0.058, 0.005],
+        [0.052, 0.11],
         [0, 0.115],
       ]),
     },
+    // 參考 CS：紅隊像游擊隊（卡其、橄欖、頭套），藍隊像反恐小組（深藍灰、黑色防彈背心、戰術頭盔）
     SoldierPalette = {
-      red: { uniform: 7232584, vest: 10172978, helmet: 5194548, band: 12597547, pack: 5328449 },
-      blue: { uniform: 4542556, vest: 3034998, helmet: 3095110, band: 3900150, pack: 3554885 },
-      boots: 2828834,
-      gloves: 2829099,
-      gear: 3816244,
-      lens: 14263361,
-      dark: 1776411,
-      skins: [14725263, 13012068, 9263676],
-      metal: 2763822,
-      polymer: 3814188,
-      scope: 1973026,
+      red: {
+        uniform: 0x6f634b,
+        pants: 0x5b5543,
+        vest: 0x4f4636,
+        pouch: 0x5f5541,
+        helmet: 0x5a5040,
+        hood: 0x2a2622,
+        band: 0xb8332a,
+        pack: 0x4b4334,
+      },
+      blue: {
+        uniform: 0x3a4351,
+        pants: 0x313844,
+        vest: 0x23272d,
+        pouch: 0x2d3239,
+        helmet: 0x2b3039,
+        hood: 0x23272d,
+        band: 0x2f7de1,
+        pack: 0x2a2e35,
+      },
+      boots: 0x2b2620,
+      sole: 0x161412,
+      gloves: 0x24221f,
+      gear: 0x3a3a34,
+      lens: 0x2a3540,
+      dark: 0x1b1b1b,
+      brow: 0x2a2018,
+      skins: [0xe0b08f, 0xc68c64, 0x8d5c3c],
+      metal: 0x2a2c2e,
+      polymer: 0x3a3330,
+      scope: 0x1e1b16,
     },
     SoldierGeoCache = new Map(),
     sgM = new Ne(),
@@ -25911,6 +26109,10 @@ void main(){
       out
     );
   }
+  function shade(hex, k) {
+    const c = new Ve(hex);
+    return (c.multiplyScalar(k), c.getHex());
+  }
   function soldierGeo(team, kind, skin, part) {
     const key = `${team}:${kind}:${skin}:${part}`;
     let g = SoldierGeoCache.get(key);
@@ -25918,106 +26120,151 @@ void main(){
     const P = SoldierPrim,
       C = SoldierPalette,
       T = C[team] ?? C.red,
+      ct = team === "blue",
       sniper = kind === "ranged",
-      sk = C.skins[skin % C.skins.length];
+      sk = C.skins[skin % C.skins.length],
+      lip = shade(sk, 0.72);
     let parts;
     switch (part) {
       case "hips":
         parts = [
-          [P.pelvis, [0, 0, 0], [1, 1, 0.7], null, T.uniform],
-          [P.box, [0, 0.045, 0], [0.33, 0.055, 0.23], null, C.gear],
-          [P.box, [0.17, -0.02, -0.02], [0.05, 0.13, 0.09], null, C.dark],
-          [P.box, [-0.12, 0.0, 0.1], [0.07, 0.08, 0.05], null, C.gear],
+          [P.pelvis, [0, 0, 0], [1.05, 1, 0.76], null, T.pants],
+          [P.rbox, [0, 0.055, 0], [0.34, 0.06, 0.25], null, T.vest],
+          [P.rbox, [0, 0.055, -0.125], [0.06, 0.042, 0.02], null, C.metal],
+          [P.rbox, [0.18, -0.04, -0.01], [0.055, 0.15, 0.11], null, C.dark],
+          [P.rbox, [-0.11, 0.0, 0.12], [0.1, 0.1, 0.06], null, T.pouch],
+          [P.rbox, [0.08, 0.02, 0.13], [0.07, 0.08, 0.05], null, T.pouch],
         ];
         break;
       case "spine":
         parts = [
-          [P.torso, [0, 0, 0], [1, 1, 0.64], null, T.uniform],
-          [P.box, [0, 0.28, 0], [0.37, 0.33, 0.26], null, T.vest],
-          [P.box, [-0.115, 0.16, -0.14], [0.08, 0.1, 0.05], null, C.gear],
-          [P.box, [0, 0.16, -0.14], [0.08, 0.1, 0.05], null, C.gear],
-          [P.box, [0.115, 0.16, -0.14], [0.08, 0.1, 0.05], null, C.gear],
-          [P.box, [0.12, 0.42, -0.04], [0.07, 0.04, 0.24], null, T.vest],
-          [P.box, [-0.12, 0.42, -0.04], [0.07, 0.04, 0.24], null, T.vest],
-          [P.box, [-0.2, 0.37, 0], [0.03, 0.05, 0.1], null, T.band],
-          [P.box, [0.2, 0.37, 0], [0.03, 0.05, 0.1], null, T.band],
-        ];
-        sniper
-          ? parts.push([P.box, [0.0, 0.33, 0.15], [0.16, 0.18, 0.06], null, C.gear])
-          : parts.push(
-              [P.box, [0, 0.3, 0.17], [0.24, 0.3, 0.1], null, T.pack],
-              [P.box, [0.08, 0.5, 0.18], [0.015, 0.16, 0.015], null, C.dark],
-            );
-        break;
-      case "neck":
-        parts = [[P.neck, [0, 0, 0], [1, 1, 1], null, sk]];
-        break;
-      case "head":
-        parts = [
-          [P.sphere, [0, 0.1, 0], [0.092, 0.108, 0.1], null, sk],
-          [P.sphere, [0, 0.085, -0.093], [0.02, 0.028, 0.02], null, sk],
-          [P.box, [0, 0.03, -0.035], [0.13, 0.06, 0.13], null, sk],
-          [P.sphere, [0.034, 0.112, -0.086], [0.014, 0.01, 0.01], null, C.dark],
-          [P.sphere, [-0.034, 0.112, -0.086], [0.014, 0.01, 0.01], null, C.dark],
-          [P.box, [0, 0.13, -0.09], [0.1, 0.012, 0.012], null, C.dark],
+          [P.torso, [0, 0, 0], [1.04, 1, 0.66], null, T.uniform],
+          [P.torso, [0, 0.12, 0], [1.1, 0.63, 0.75], null, T.vest],
+          [P.rbox, [0, 0.29, -0.118], [0.3, 0.28, 0.06], null, T.vest],
+          [P.rbox, [0, 0.3, 0.112], [0.3, 0.3, 0.06], null, T.vest],
+          [P.rbox, [0.11, 0.445, -0.01], [0.075, 0.035, 0.25], null, T.vest],
+          [P.rbox, [-0.11, 0.445, -0.01], [0.075, 0.035, 0.25], null, T.vest],
+          [P.rbox, [-0.092, 0.2, -0.158], [0.078, 0.12, 0.05], null, T.pouch],
+          [P.rbox, [0, 0.2, -0.158], [0.078, 0.12, 0.05], null, T.pouch],
+          [P.rbox, [0.092, 0.2, -0.158], [0.078, 0.12, 0.05], null, T.pouch],
+          [P.rbox, [-0.092, 0.27, -0.165], [0.07, 0.025, 0.04], null, shade(T.pouch, 0.8)],
+          [P.rbox, [0, 0.27, -0.165], [0.07, 0.025, 0.04], null, shade(T.pouch, 0.8)],
+          [P.rbox, [0.092, 0.27, -0.165], [0.07, 0.025, 0.04], null, shade(T.pouch, 0.8)],
+          [P.rbox, [-0.085, 0.37, -0.153], [0.065, 0.075, 0.035], null, T.pouch],
+          [P.rbox, [0.085, 0.375, -0.152], [0.075, 0.048, 0.012], null, T.band],
+          [P.box, [-0.11, 0.43, -0.15], [0.012, 0.09, 0.012], null, C.dark],
         ];
         sniper
           ? parts.push(
-              [P.dome, [0, 0.13, 0.005], [0.112, 0.1, 0.118], null, T.helmet],
-              [P.box, [0, 0.135, -0.13], [0.2, 0.012, 0.09], [0.12, 0, 0], T.helmet],
-              [P.box, [0, 0.15, 0], [0.23, 0.02, 0.23], null, T.helmet],
-              [P.box, [0, 0.115, -0.094], [0.15, 0.03, 0.02], null, C.dark],
+              [P.rbox, [0, 0.33, 0.16], [0.16, 0.18, 0.06], null, T.pack],
+              [P.box, [0.06, 0.47, 0.16], [0.012, 0.2, 0.012], null, C.dark],
+            )
+          : ct
+            ? parts.push(
+                [P.rbox, [0, 0.3, 0.165], [0.22, 0.28, 0.07], null, T.pack],
+                [P.rbox, [0, 0.2, 0.2], [0.16, 0.06, 0.02], null, shade(T.pack, 0.8)],
+              )
+            : parts.push([P.rbox, [0.05, 0.12, 0.155], [0.2, 0.12, 0.08], [0, 0, 0.2], T.pack]);
+        break;
+      case "neck":
+        parts = [[P.neck, [0, 0, 0], [1.06, 1, 1.06], null, ct || sniper ? sk : T.hood]];
+        ct && parts.push([P.neck, [0, 0, 0], [1.25, 0.45, 1.25], null, T.uniform]);
+        break;
+      case "head": {
+        const hooded = !ct && !sniper,
+          face = hooded ? T.hood : sk;
+        parts = [
+          [P.sphere, [0, 0.1, 0], [0.09, 0.106, 0.098], null, face],
+          [P.ball, [0, 0.045, -0.028], [0.07, 0.056, 0.072], null, face],
+        ];
+        hooded
+          ? parts.push(
+              [P.rbox, [0, 0.112, -0.072], [0.13, 0.036, 0.06], null, sk],
+              [P.ball, [0.031, 0.112, -0.1], [0.013, 0.008, 0.006], null, C.dark],
+              [P.ball, [-0.031, 0.112, -0.1], [0.013, 0.008, 0.006], null, C.dark],
+              [P.rbox, [0, 0.126, -0.1], [0.1, 0.01, 0.01], null, C.brow],
+              [P.ball, [0, 0.21, 0.01], [0.02, 0.015, 0.02], null, T.hood],
             )
           : parts.push(
-              [P.dome, [0, 0.115, 0.004], [0.13, 0.13, 0.138], null, T.helmet],
-              [P.box, [0, 0.15, -0.115], [0.17, 0.045, 0.035], [0.25, 0, 0], C.dark],
-              [P.box, [0, 0.15, -0.135], [0.13, 0.025, 0.012], [0.25, 0, 0], C.lens],
-              [P.box, [0.112, 0.09, 0], [0.045, 0.075, 0.075], null, C.gear],
-              [P.box, [-0.112, 0.09, 0], [0.045, 0.075, 0.075], null, C.gear],
-              [P.box, [0, 0.19, 0.02], [0.2, 0.02, 0.03], null, T.band],
+              [P.ball, [0, 0.092, -0.097], [0.016, 0.025, 0.02], null, sk],
+              [P.ball, [0.09, 0.1, 0.006], [0.014, 0.026, 0.02], null, sk],
+              [P.ball, [-0.09, 0.1, 0.006], [0.014, 0.026, 0.02], null, sk],
+              [P.ball, [0.032, 0.113, -0.086], [0.013, 0.008, 0.008], null, C.dark],
+              [P.ball, [-0.032, 0.113, -0.086], [0.013, 0.008, 0.008], null, C.dark],
+              [P.rbox, [0.033, 0.129, -0.088], [0.034, 0.008, 0.012], [0, 0, -0.12], C.brow],
+              [P.rbox, [-0.033, 0.129, -0.088], [0.034, 0.008, 0.012], [0, 0, 0.12], C.brow],
+              [P.rbox, [0, 0.058, -0.094], [0.034, 0.007, 0.012], null, lip],
             );
+        sniper
+          ? parts.push(
+              [P.dome, [0, 0.13, 0.005], [0.105, 0.095, 0.112], null, T.helmet],
+              [P.rbox, [0, 0.14, -0.125], [0.14, 0.01, 0.07], [0.2, 0, 0], T.helmet],
+              [P.rbox, [0, 0.122, -0.002], [0.215, 0.016, 0.225], null, T.helmet],
+            )
+          : ct
+            ? parts.push(
+                [P.dome, [0, 0.112, 0.006], [0.128, 0.13, 0.136], null, T.helmet],
+                [P.rbox, [0.124, 0.12, 0.004], [0.016, 0.03, 0.15], null, C.dark],
+                [P.rbox, [-0.124, 0.12, 0.004], [0.016, 0.03, 0.15], null, C.dark],
+                [P.rbox, [0, 0.2, -0.118], [0.05, 0.04, 0.024], [0.4, 0, 0], C.dark],
+                [P.rbox, [0, 0.172, -0.124], [0.16, 0.04, 0.035], [0.35, 0, 0], C.dark],
+                [P.rbox, [0, 0.172, -0.141], [0.13, 0.026, 0.012], [0.35, 0, 0], C.lens],
+                [P.rbox, [0.11, 0.09, 0.004], [0.045, 0.08, 0.08], null, C.gear],
+                [P.rbox, [-0.11, 0.09, 0.004], [0.045, 0.08, 0.08], null, C.gear],
+                [P.box, [-0.1, 0.055, -0.05], [0.008, 0.008, 0.08], [0, 0.5, 0], C.dark],
+                [P.rbox, [0, 0.225, 0.02], [0.14, 0.012, 0.06], null, T.band],
+              )
+            : parts.push([P.rbox, [0, 0.105, 0.015], [0.2, 0.022, 0.2], null, shade(T.hood, 1.3)]);
         break;
+      }
       case "thigh":
         parts = [
-          [P.thigh, [0, 0, 0], [1, 1, 1], null, T.uniform],
-          [P.box, [0.085, -0.22, 0], [0.04, 0.12, 0.1], null, C.gear],
+          [P.ball, [0, -0.01, 0], [0.1, 0.09, 0.1], null, T.pants],
+          [P.thigh, [0, 0, 0], [1, 1, 1], null, T.pants],
+          [P.rbox, [0.088, -0.24, -0.005], [0.045, 0.13, 0.11], null, shade(T.pants, 0.88)],
+          [P.ball, [0, -0.46, 0], [0.072, 0.072, 0.072], null, T.pants],
         ];
         break;
       case "shin":
         parts = [
-          [P.shin, [0, 0, 0], [1, 1, 1], null, T.uniform],
-          [P.box, [0, -0.02, -0.06], [0.11, 0.11, 0.05], null, C.gear],
-          [P.box, [0, -0.39, 0], [0.12, 0.12, 0.13], null, C.boots],
-          [P.box, [0, -0.445, -0.05], [0.115, 0.075, 0.26], null, C.boots],
+          [P.shin, [0, 0, 0], [1, 1, 1], null, T.pants],
+          [P.rbox, [0, -0.025, -0.068], [0.112, 0.115, 0.05], null, T.pouch],
+          [P.rbox, [0, -0.36, 0.005], [0.122, 0.16, 0.13], null, C.boots],
+          [P.rbox, [0, -0.442, -0.048], [0.116, 0.072, 0.25], null, C.boots],
+          [P.rbox, [0, -0.476, -0.048], [0.124, 0.022, 0.262], null, C.sole],
         ];
         break;
       case "upperArm":
         parts = [
+          [P.ball, [0, -0.025, 0], [0.08, 0.085, 0.082], null, T.uniform],
           [P.upperArm, [0, 0, 0], [1, 1, 1], null, T.uniform],
-          [P.box, [0, -0.06, 0], [0.13, 0.08, 0.13], null, T.uniform],
+          [P.rbox, [0, -0.1, 0], [0.142, 0.045, 0.142], null, T.band],
         ];
         break;
       case "foreArm":
         parts = [
-          [P.foreArm, [0, 0, 0], [1, 1, 1], null, T.uniform],
-          [P.sphere, [0, -0.3, -0.01], [0.045, 0.055, 0.035], null, C.gloves],
-          [P.box, [0, -0.23, 0], [0.075, 0.05, 0.075], null, C.gloves],
+          [P.ball, [0, 0, 0], [0.06, 0.062, 0.06], null, T.uniform],
+          [P.foreArm, [0, 0, 0], [1, 1, 1], null, ct ? T.uniform : sk],
+          [P.rbox, [0, -0.225, 0], [0.078, 0.06, 0.078], null, C.gloves],
+          [P.rbox, [0, -0.295, -0.008], [0.056, 0.095, 0.05], null, C.gloves],
+          [P.ball, [0.02, -0.28, -0.035], [0.02, 0.035, 0.02], null, C.gloves],
         ];
+        !ct && parts.push([P.rbox, [0, -0.02, 0], [0.13, 0.06, 0.13], null, T.uniform]);
         break;
       case "gun":
         parts = [
-          [P.box, [0, 0.04, -0.06], [0.055, 0.085, 0.36], null, C.metal],
+          [P.rbox, [0, 0.04, -0.06], [0.055, 0.085, 0.36], null, C.metal],
           [P.box, [0, -0.04, 0.005], [0.04, 0.11, 0.05], [0.25, 0, 0], C.polymer],
           [P.box, [0, -0.04, -0.13], [0.04, 0.13, 0.065], [-0.2, 0, 0], C.metal],
-          [P.box, [0, 0.035, -0.32], [0.06, 0.065, 0.2], null, C.polymer],
-          [P.box, [0, 0.035, 0.2], [0.045, 0.075, 0.22], null, C.polymer],
+          [P.rbox, [0, 0.035, -0.32], [0.06, 0.065, 0.2], null, C.polymer],
+          [P.rbox, [0, 0.035, 0.2], [0.045, 0.075, 0.22], null, C.polymer],
           [P.box, [0, 0.095, -0.08], [0.02, 0.025, 0.2], null, C.dark],
         ];
         sniper
           ? parts.push(
               [P.box, [0, 0.045, -0.62], [0.022, 0.022, 0.42], null, C.metal],
-              [P.box, [0, 0.13, -0.08], [0.045, 0.05, 0.24], null, C.scope],
-              [P.box, [0, 0.13, -0.21], [0.06, 0.06, 0.03], null, C.scope],
+              [P.rbox, [0, 0.13, -0.08], [0.045, 0.05, 0.24], null, C.scope],
+              [P.rbox, [0, 0.13, -0.21], [0.06, 0.06, 0.03], null, C.scope],
             )
           : parts.push(
               [P.box, [0, 0.045, -0.5], [0.025, 0.025, 0.2], null, C.metal],
@@ -26030,8 +26277,29 @@ void main(){
     }
     return ((g = mergeSoldierParts(parts)), SoldierGeoCache.set(key, g), g);
   }
-  const SoldierMat = new mt({ vertexColors: !0, roughness: 0.82, metalness: 0.05 }),
-    ikD = new E(),
+  const SoldierMat = new mt({ vertexColors: !0, roughness: 0.86, metalness: 0.04 });
+  // 布料細節：細顆粒織紋＋大塊磨損，讓衣服不像塑膠
+  SoldierMat.onBeforeCompile = (sh) => {
+    ((sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vSPos;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvSPos = position;")),
+      (sh.fragmentShader = sh.fragmentShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+varying vec3 vSPos;
+float sHash(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+float sNoise(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(mix(sHash(i), sHash(i+vec3(1,0,0)), f.x), mix(sHash(i+vec3(0,1,0)), sHash(i+vec3(1,1,0)), f.x), f.y),
+             mix(mix(sHash(i+vec3(0,0,1)), sHash(i+vec3(1,0,1)), f.x), mix(sHash(i+vec3(0,1,1)), sHash(i+vec3(1,1,1)), f.x), f.y), f.z); }`,
+        )
+        .replace(
+          "#include <color_fragment>",
+          `#include <color_fragment>
+diffuseColor.rgb *= 0.9 + 0.1 * sHash(floor(vSPos * 260.0)) + 0.12 * (sNoise(vSPos * 14.0) - 0.5);`,
+        )));
+  };
+  const ikD = new E(),
     ikN = new E(),
     ikU = new E(),
     ikF = new E(),
@@ -26613,7 +26881,56 @@ void main(){
         (this.transition(e, "attack"), e.settle(n));
         return;
       }
-      this.moveWithUnstick(e, n);
+      (this.routeDir(e, n), this.moveWithUnstick(e, n));
+    }
+    // 看不到目標時沿路網走（先走自己分配到的路線），看得到就直接衝
+    routeDir(e, dt) {
+      const G = this.ctx.nav.graph,
+        tg = this.target;
+      if (!G || !tg) return;
+      if (e.timeSinceSeen === 0) {
+        ((e.laneDone = !0), (e.navPath = null));
+        return;
+      }
+      const p = e.position;
+      if (!e.laneDone && e.laneRoute && e.laneRoute.length) {
+        // 照分配到的路線走：到點就換下一點，走完路線才改成直接找人
+        const R = e.laneRoute;
+        for (; R.length > 1; ) {
+          const a = G.pts[R[0]],
+            b = G.pts[R[1]];
+          if ((p.x - a.x) ** 2 + (p.z - a.z) ** 2 < 4 || (p.x - b.x) ** 2 + (p.z - b.z) ** 2 < (a.x - b.x) ** 2 + (a.z - b.z) ** 2) R.shift();
+          else break;
+        }
+        if (R.length <= 1) e.laneDone = !0;
+        else {
+          const w = G.pts[R[0]];
+          (lt.set(w.x - p.x, 0, w.z - p.z), lt.lengthSq() > 1e-4 && lt.normalize());
+          return;
+        }
+      }
+      if (((e.navTimer = (e.navTimer ?? 0) - dt), !e.navPath || e.navTimer <= 0)) {
+        e.navTimer = 1.2 + Math.random() * 0.6;
+        const from = G.nearest(p),
+          goal = G.nearest(tg.position);
+        let route = G.path(from, goal);
+        // 如果已經比第一個點更接近第二個點，就跳過第一個
+        if (route.length > 1) {
+          const a = G.pts[route[0]],
+            b = G.pts[route[1]];
+          (p.x - b.x) ** 2 + (p.z - b.z) ** 2 < (a.x - b.x) ** 2 + (a.z - b.z) ** 2 && route.shift();
+        }
+        e.navPath = route;
+      }
+      const path = e.navPath;
+      for (; path.length; ) {
+        const w = G.pts[path[0]];
+        if ((p.x - w.x) ** 2 + (p.z - w.z) ** 2 > 2.6) break;
+        path.shift();
+      }
+      if (!path.length) return;
+      const w = G.pts[path[0]];
+      (lt.set(w.x - p.x, 0, w.z - p.z), lt.lengthSq() > 1e-4 && lt.normalize());
     }
     moveWithUnstick(e, t) {
       if (e.unstickTimer > 0) {
@@ -30250,6 +30567,7 @@ void main() {
         (this.currentLevel = e),
         this.world.setBoxes(t.colliders),
         this.enemies.setObstacles(t.collidables),
+        (this.enemies.nav.graph = t.nav ?? null),
         (FX.obstacles = t.collidables),
         this.clearCombatFx(),
         this.spawner.setSpawnPoints(t.spawnPoints),
@@ -30538,7 +30856,11 @@ void main() {
     spawnTeamBot(e, t, n) {
       const i = this.enemies.spawn(t, n, 1, !0, e);
       if (!i) return null;
+      const gr = this.enemies.nav.graph;
       ((i.leader = null),
+        (i.laneRoute = gr ? gr.pickRoute(e) : null),
+        (i.laneDone = !1),
+        (i.navPath = null),
         (i.spawnShield = SpawnShield),
         (i.corpseLinger = this.match.rule === "round" ? 1e9 : 8),
         (i.name = `${KindName[t]} ${++this.botSerial}`));
