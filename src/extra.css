@@ -41,3 +41,12 @@ body.is-touch .start{place-items:start center}
 #boot{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;background:#11151c;color:#e6edf3;font:500 15px/1.5 system-ui,sans-serif}
 #boot b{font-size:22px;letter-spacing:.12em;color:#7dd3fc}#boot span{opacity:.6;font-size:13px}
 #boot.is-error b{color:#f87171}#boot.is-error span{opacity:.85;max-width:90vw;word-break:break-word}
+
+/* 狙擊鏡與暗角 */
+.vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.32) 100%)}
+.scope{position:fixed;inset:0;pointer-events:none;display:none;background:radial-gradient(circle at center,transparent 0 36vmin,rgba(0,0,0,.75) 36.4vmin,#000 37.5vmin)}
+.scope.is-on{display:block}
+.scope::before,.scope::after{content:"";position:absolute;background:rgba(0,0,0,.9)}
+.scope::before{left:0;right:0;top:50%;height:1px}
+.scope::after{top:0;bottom:0;left:50%;width:1px}
+.is-hidden{visibility:hidden!important}

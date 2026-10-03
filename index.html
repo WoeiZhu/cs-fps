@@ -51,6 +51,15 @@ body.is-touch .start{place-items:start center}
 #boot b{font-size:22px;letter-spacing:.12em;color:#7dd3fc}#boot span{opacity:.6;font-size:13px}
 #boot.is-error b{color:#f87171}#boot.is-error span{opacity:.85;max-width:90vw;word-break:break-word}
 
+/* 狙擊鏡與暗角 */
+.vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.32) 100%)}
+.scope{position:fixed;inset:0;pointer-events:none;display:none;background:radial-gradient(circle at center,transparent 0 36vmin,rgba(0,0,0,.75) 36.4vmin,#000 37.5vmin)}
+.scope.is-on{display:block}
+.scope::before,.scope::after{content:"";position:absolute;background:rgba(0,0,0,.9)}
+.scope::before{left:0;right:0;top:50%;height:1px}
+.scope::after{top:0;bottom:0;left:50%;width:1px}
+.is-hidden{visibility:hidden!important}
+
 </style>
   </head>
   <body>
@@ -23074,6 +23083,83 @@ void main() {
       sunrise: mi("assets/hdri/goegap_road_2k.hdr"),
     },
     x1 = new E(0.55, 0.62, 0.36).normalize();
+  // 程序化天空：大氣漸層、太陽光暈與會飄動的雲（不需下載 HDRI）
+  const SkyU = { time: { value: 0 } };
+  function SkyDome() {
+    const m = new ot(
+      new Io(400, 32, 16),
+      new jt({
+        uniforms: { sunDir: { value: x1.clone() }, time: SkyU.time },
+        vertexShader: `varying vec3 vDir;
+void main(){ vDir = position; vec4 p = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0); gl_Position = p.xyww; }`,
+        fragmentShader: `uniform vec3 sunDir; uniform float time; varying vec3 vDir;
+float hs(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(hs(i), hs(i+vec2(1.0,0.0)), f.x), mix(hs(i+vec2(0.0,1.0)), hs(i+vec2(1.0,1.0)), f.x), f.y); }
+float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; } return v; }
+void main(){
+  vec3 d = normalize(vDir); float y = max(d.y, 0.0);
+  vec3 zen = vec3(0.10, 0.25, 0.62), hor = vec3(0.57, 0.66, 0.74);
+  vec3 col = mix(hor, zen, pow(y, 0.5));
+  float s = max(dot(d, normalize(sunDir)), 0.0);
+  col += vec3(1.0, 0.8, 0.55) * pow(s, 6.0) * 0.35 + vec3(1.0, 0.9, 0.7) * pow(s, 64.0) * 0.8;
+  if (d.y > 0.0) {
+    vec2 uv = d.xz / (d.y + 0.15) * 1.4 + vec2(time * 0.004, time * 0.0015);
+    float c = fbm(uv);
+    c = smoothstep(0.48, 0.8, c) * smoothstep(0.0, 0.18, d.y);
+    vec3 cc = mix(vec3(0.62, 0.66, 0.72), vec3(1.05, 1.0, 0.95), 0.55 + 0.45 * pow(s, 3.0));
+    col = mix(col, cc, c * 0.9);
+  }
+  col += vec3(1.6, 1.4, 1.1) * smoothstep(0.9995, 0.9998, s);
+  col = mix(col, hor * 0.92, smoothstep(0.05, -0.03, d.y));
+  gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+        side: 1,
+        depthWrite: !1,
+        fog: !1,
+      }),
+    );
+    return ((m.frustumCulled = !1), (m.renderOrder = -1), (m.name = "sky"), m);
+  }
+  // 地圖外的遠景城市剪影：讓街道盡頭不再是一面牆
+  function Skyline(box) {
+    const cv = document.createElement("canvas");
+    ((cv.width = 64), (cv.height = 128));
+    const g = cv.getContext("2d");
+    if (g) {
+      ((g.fillStyle = "#6b6e72"), g.fillRect(0, 0, 64, 128));
+      for (let y = 4; y < 124; y += 8)
+        for (let x = 4; x < 60; x += 8)
+          ((g.fillStyle = Math.random() < 0.25 ? "#9aa3ad" : Math.random() < 0.5 ? "#3d434b" : "#4f565e"), g.fillRect(x, y, 5, 5));
+    }
+    const tex = new yh(cv);
+    ((tex.colorSpace = qt), (tex.wrapS = tex.wrapT = 1e3));
+    const mat = new mt({ map: tex, roughness: 0.9, metalness: 0.1, color: 13685981 }),
+      N = 70,
+      mesh = new jr(new Rt(1, 1, 1), mat, N),
+      o = new st(),
+      c = new E(),
+      sz = new E();
+    (box.getCenter(c), box.getSize(sz));
+    const hx = sz.x / 2 + 45,
+      hz = sz.z / 2 + 45;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 + Math.random() * 0.05,
+        ca = Math.cos(a),
+        sa = Math.sin(a),
+        k = Math.min(hx / Math.max(Math.abs(ca), 1e-3), hz / Math.max(Math.abs(sa), 1e-3)) + Math.random() * 60,
+        w = 12 + Math.random() * 18,
+        h = 22 + Math.random() * 50;
+      (o.position.set(c.x + ca * k, h / 2 - 0.5, c.z + sa * k),
+        o.rotation.set(0, Math.random() * 0.4, 0),
+        o.scale.set(w, h, 10 + Math.random() * 14),
+        o.updateMatrix(),
+        mesh.setMatrixAt(i, o.matrix));
+    }
+    return ((mesh.name = "skyline"), (mesh.castShadow = !1), (mesh.receiveShadow = !1), mesh);
+  }
   function q1(r, e, t = 45, n = "quarry") {
     const i = new Lo(16773336, 3.2);
     (i.position.copy(x1).multiplyScalar(60),
@@ -23125,7 +23211,8 @@ void main() {
                 },
               );
             });
-    r.fog = new Wo(13814712, 75, 200);
+    r.fog = new Wo(12961236, 70, 230);
+    r.add(SkyDome());
     const h = {
       sun: i,
       bounce: s,
@@ -25638,15 +25725,16 @@ void main() {
     constructor(e) {
       ((this.camera = e), (this.currentFov = Mt.camera.fov), (this.targetFov = Mt.camera.fov));
     }
+    adsFov = 0;
     applyLook(e, t) {
-      const n = Mt.camera.sensitivity;
+      const n = Mt.camera.sensitivity * Math.min(1, this.currentFov / Mt.camera.fov);
       ((this.yaw -= e * n),
         (this.pitch -= t * n),
         (this.pitch = si.clamp(this.pitch, -Yc, Yc)),
         this.yaw > Math.PI ? (this.yaw -= Math.PI * 2) : this.yaw < -Math.PI && (this.yaw += Math.PI * 2));
     }
     setAiming(e) {
-      this.targetFov = e ? Mt.camera.adsFov : Mt.camera.fov;
+      this.targetFov = e ? this.adsFov || Mt.camera.adsFov : Mt.camera.fov;
     }
     getForward(e) {
       const t = this.pitch + this.recoilPitch,
@@ -27048,8 +27136,10 @@ void main() {
         reserveAmmo: 1 / 0,
         infiniteReserve: !0,
         reloadTime: 1.3,
-        spread: { hip: 0.012, ads: 0.002 },
+        spread: { hip: 0.009, ads: 0.003 },
         recoil: { vertical: 0.022, horizontal: 0.008, recovery: 9 },
+        moveInacc: 1.2,
+        sprayGrow: 0.12,
         range: 120,
         viewModel: { length: 0.26, height: 0.16, width: 0.07, color: 4146768, style: "pistol" },
       },
@@ -27067,8 +27157,11 @@ void main() {
         reserveAmmo: 180,
         infiniteReserve: !1,
         reloadTime: 2.1,
-        spread: { hip: 0.026, ads: 0.004 },
+        spread: { hip: 0.007, ads: 0.0025 },
         recoil: { vertical: 0.016, horizontal: 0.006, recovery: 8 },
+        moveInacc: 2.6,
+        sprayGrow: 0.09,
+        pattern: !0,
         range: 200,
         viewModel: { length: 0.62, height: 0.14, width: 0.06, color: 4870232, style: "rifle" },
       },
@@ -27088,11 +27181,35 @@ void main() {
         reloadTime: 2.6,
         spread: { hip: 0.075, ads: 0.05 },
         recoil: { vertical: 0.055, horizontal: 0.02, recovery: 6 },
+        moveInacc: 0.25,
+        sprayGrow: 0.02,
         range: 45,
         viewModel: { length: 0.7, height: 0.15, width: 0.07, color: 6045747, style: "shotgun" },
       },
+      sniper: {
+        id: "sniper",
+        name: "狙擊槍",
+        type: "hitscan",
+        damage: 115,
+        headshotMultiplier: 2,
+        headshotKillChance: 1,
+        pellets: 1,
+        fireRate: 0.7,
+        auto: !1,
+        magSize: 5,
+        reserveAmmo: 30,
+        infiniteReserve: !1,
+        reloadTime: 3.4,
+        spread: { hip: 0.07, ads: 4e-4 },
+        recoil: { vertical: 0.09, horizontal: 0.012, recovery: 5 },
+        moveInacc: 14,
+        sprayGrow: 0,
+        scope: 18,
+        range: 400,
+        viewModel: { length: 0.84, height: 0.13, width: 0.06, color: 3359790, style: "sniper" },
+      },
     },
-    Iq = ["pistol", "rifle", "shotgun"];
+    Iq = ["pistol", "rifle", "shotgun", "sniper"];
   class Hq {
     config;
     ammoInMag;
@@ -27100,6 +27217,9 @@ void main() {
     cooldown = 0;
     reloadTimer = 0;
     triggerHeld = !1;
+    spray = 0;
+    sinceShot = 9;
+    inacc = 1;
     constructor(e) {
       ((this.config = e), (this.ammoInMag = e.magSize), (this.reserve = e.infiniteReserve ? 1 / 0 : e.reserveAmmo));
     }
@@ -27116,6 +27236,8 @@ void main() {
       return !this.isReloading && this.ammoInMag < this.config.magSize && this.reserve > 0;
     }
     update(e) {
+      ((this.sinceShot += e),
+        this.sinceShot > 0.16 && this.spray > 0 && (this.spray = Math.max(0, this.spray - e * 11)));
       (this.cooldown > 0 && (this.cooldown = Math.max(0, this.cooldown - e)),
         this.reloadTimer > 0 &&
           ((this.reloadTimer = Math.max(0, this.reloadTimer - e)), this.reloadTimer === 0 && this.finishReload()));
@@ -27145,10 +27267,10 @@ void main() {
       );
     }
     beginShot() {
-      (this.ammoInMag--, (this.cooldown = 1 / this.config.fireRate));
+      (this.ammoInMag--, (this.cooldown = 1 / this.config.fireRate), (this.spray = Math.min(this.spray + 1, 30)), (this.sinceShot = 0));
     }
     spreadFor(e) {
-      return e ? this.config.spread.ads : this.config.spread.hip;
+      return (e ? this.config.spread.ads : this.config.spread.hip) * this.inacc * (1 + this.spray * (this.config.sprayGrow ?? 0.05));
     }
   }
   const fA = 16,
@@ -27196,9 +27318,9 @@ void main() {
         this.consumeTrigger(i) !== "fire")
       )
         return s;
+      const f = this.spreadFor(n);
       (this.beginShot(), (s.fired = !0));
       const l = Math.random() < this.config.headshotKillChance,
-        f = this.spreadFor(n),
         c = Math.min(this.config.pellets, fA);
       Kq(t, cA, AA);
       for (let A = 0; A < c; A++) {
@@ -27229,9 +27351,15 @@ void main() {
             ((s.hitTarget = !0), m.zone === "head" && ((s.headshot = !0), m.lethalHeadshot && (s.headshotKill = !0))),
           s.hitCount++);
       }
+      // CS 式彈道：前幾發往上爬，之後左右擺動
+      const k = this.spray,
+        rv = this.config.recoil.vertical,
+        rh = this.config.recoil.horizontal;
       return (
-        (s.recoilPitch = this.config.recoil.vertical),
-        (s.recoilYaw = (Math.random() - 0.5) * 2 * this.config.recoil.horizontal),
+        this.config.pattern
+          ? ((s.recoilPitch = rv * (k <= 9 ? 0.7 + k * 0.16 : 0.45)),
+            (s.recoilYaw = k > 7 ? Math.sin((k - 7) * 0.62) * rh * 4 + (Math.random() - 0.5) * rh : (Math.random() - 0.5) * rh))
+          : ((s.recoilPitch = rv * (1 + Math.min(k, 6) * 0.08)), (s.recoilYaw = (Math.random() - 0.5) * 2 * rh)),
         s
       );
     }
@@ -27289,6 +27417,11 @@ void main() {
           h(l, i * 0.9, n * 0.9, t * 0.3, 0, -n * 0.05, t * 0.13),
           h(f, i * 0.95, n * 1.15, t * 0.06, 0, -n * 0.1, t * 0.27)),
         s === "shotgun" && h(f, i * 1.15, n * 0.6, t * 0.2, 0, -n * 0.45, -t * 0.78),
+        s === "sniper" &&
+          (h(f, i * 0.95, i * 0.95, t * 0.42, 0, n * 1.05, -t * 0.42),
+          h(f, i * 1.25, i * 1.25, t * 0.06, 0, n * 1.05, -t * 0.66),
+          h(f, i * 1.15, i * 1.15, t * 0.05, 0, n * 1.05, -t * 0.2),
+          h(c, i * 0.3, n * 0.55, i * 0.3, 0, n * 0.6, -t * 0.42)),
         h(f, i * 0.18, n * 0.42, i * 0.18, 0, n * 0.95, -t * 0.94),
         h(f, i * 0.7, n * 0.3, i * 0.2, 0, n * 0.9, -t * 0.12));
       const x = -t * 0.24;
@@ -27400,6 +27533,7 @@ void main() {
       pistol: { body: 180, decay: 0.13, cutoff: 3200 },
       rifle: { body: 140, decay: 0.1, cutoff: 4200 },
       shotgun: { body: 90, decay: 0.28, cutoff: 2400 },
+      sniper: { body: 60, decay: 0.55, cutoff: 3600 },
     },
     dA = new E(),
     uA = new E();
@@ -28339,6 +28473,39 @@ void main() {
       (this.material.dispose(), this._fsQuad.dispose());
     }
   }
+  // 調色：微幅對比、飽和、冷暗部暖亮部，加上細微底片顆粒
+  class GradePass extends cr {
+    constructor() {
+      (super(),
+        (this.material = new jt({
+          uniforms: { tDiffuse: { value: null }, time: { value: 0 } },
+          vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+          fragmentShader: `uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv;
+void main(){
+  vec3 c = texture2D(tDiffuse, vUv).rgb;
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(vec3(l), c, 1.1);
+  c = (c - 0.5) * 1.07 + 0.5;
+  c += mix(vec3(-0.012, 0.0, 0.018), vec3(0.02, 0.008, -0.015), smoothstep(0.2, 0.8, l));
+  float g = fract(sin(dot(gl_FragCoord.xy + fract(time) * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
+  c += (g - 0.5) * 0.022;
+  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`,
+          depthTest: !1,
+          depthWrite: !1,
+        })),
+        (this._fsQuad = new ul(this.material)));
+    }
+    render(e, t, n) {
+      ((this.material.uniforms.tDiffuse.value = n.texture),
+        (this.material.uniforms.time.value = performance.now() / 1e3),
+        this.renderToScreen === !0 ? e.setRenderTarget(null) : e.setRenderTarget(t),
+        this._fsQuad.render(e));
+    }
+    dispose() {
+      (this.material.dispose(), this._fsQuad.dispose());
+    }
+  }
   class xV {
     composer;
     bloom;
@@ -28357,7 +28524,9 @@ void main() {
         (this.bloom = new Ar(new be(o, l), 0.5, 0.6, 0.75)),
         (this.bloom.enabled = i.bloom),
         this.composer.addPass(this.bloom),
-        this.composer.addPass(new mV()));
+        this.composer.addPass(new mV()),
+        (this.grade = new GradePass()),
+        this.composer.addPass(this.grade));
     }
     get bloomEnabled() {
       return this.bloom.enabled;
@@ -28552,6 +28721,27 @@ void main() {
           l.start(s + d),
           l.stop(s + d + 0.2));
       }
+    }
+    playStep(g, pan, enemy) {
+      const t = this.ctx,
+        n = this.master,
+        i = this.noise;
+      if (!t || !n || !i || g <= 0.01) return;
+      const s = t.currentTime,
+        l = t.createBufferSource();
+      ((l.buffer = i), (l.playbackRate.value = 0.7 + Math.random() * 0.3));
+      const f = t.createBiquadFilter();
+      ((f.type = "bandpass"), (f.frequency.value = enemy ? 520 + Math.random() * 120 : 420), (f.Q.value = 1.4));
+      const c = t.createGain();
+      (c.gain.setValueAtTime(0.0001, s),
+        c.gain.exponentialRampToValueAtTime(0.5 * g * g + 0.02, s + 0.01),
+        c.gain.exponentialRampToValueAtTime(0.0001, s + 0.09));
+      let o = l.connect(f).connect(c);
+      if (t.createStereoPanner) {
+        const P = t.createStereoPanner();
+        ((P.pan.value = Math.max(-1, Math.min(1, pan))), (o = o.connect(P)));
+      }
+      (o.connect(n), l.start(s, Math.random() * 0.3), l.stop(s + 0.1));
     }
     playPickup(e) {
       const t = this.ctx,
@@ -29965,6 +30155,12 @@ void main() {
             ((this.state = l ? "playing" : "paused"), l ? this.menu.hide() : this.menu.show(!0));
         }),
         (this.hud = new VV(t)),
+        (this.scopeEl = document.createElement("div")),
+        (this.scopeEl.className = "scope"),
+        t.prepend(this.scopeEl),
+        (this.vignetteEl = document.createElement("div")),
+        (this.vignetteEl.className = "vignette"),
+        t.prepend(this.vignetteEl),
         (this.menu = new vV(t)),
         (this.menu.onStart = () => {
           (this.audio.resume(), this.input.requestLock());
@@ -30096,7 +30292,17 @@ void main() {
         (this.hud.showToast(`載入城市關卡（${n.length} 個模型）…`), await this.models.loadAll(n));
       }
       const t = e === "city" ? oq(kc, this.materials, this.models) : Nc(this.materials);
-      (this.scene.remove(this.level.group),
+      (this.skyline && (this.scene.remove(this.skyline), (this.skyline = null)),
+        e === "city" &&
+          ((this.skyline = Skyline(new Wt().setFromObject(t.group))),
+          this.scene.add(this.skyline),
+          // 城市模型的頂點色是貼圖遮罩（紅/藍通道），直接乘上去會在牆角與路緣染出紅藍色塊
+          t.group.traverse((o) => {
+            if (o.isMesh)
+              for (const m of [].concat(o.material))
+                m && m.vertexColors && /^MI_/.test(m.name || "") && ((m.vertexColors = !1), (m.needsUpdate = !0));
+          })),
+        this.scene.remove(this.level.group),
         this.scene.add(t.group),
         (this.level = t),
         (this.currentLevel = e),
@@ -30112,6 +30318,32 @@ void main() {
         this.tracers.clear(),
         this.movePlayerToSpawn(),
         this.hud.showToast(e === "city" ? "城市街區" : "測試場景"));
+    }
+    scoped = !1;
+    stepAcc = new Map();
+    updateFootsteps(e) {
+      // 敵我腳步聲：跑步才有聲音（蹲走、慢走安靜），有方向與距離衰減
+      if (this.state !== "playing") return;
+      const p = this.player.position;
+      for (const b of this.enemies.enemies) {
+        if (!b || b.hp <= 0 || !b.grounded) continue;
+        const v = Math.hypot(b.velocity.x, b.velocity.z);
+        if (v < 2.6) continue;
+        const dx = b.position.x - p.x,
+          dz = b.position.z - p.z,
+          d = Math.hypot(dx, dz);
+        if (d > 32) continue;
+        const a = (this.stepAcc.get(b) ?? Math.random() * 0.3) + e;
+        if (a < 0.34) {
+          this.stepAcc.set(b, a);
+          continue;
+        }
+        this.stepAcc.set(b, 0);
+        const ry = this.rig.yaw,
+          side = (dx * Math.cos(ry) - dz * Math.sin(ry)) / Math.max(d, 0.001);
+        this.audio.playStep?.(Math.max(0, 1 - d / 32), side, b.team !== this.playerCombatant.team);
+      }
+      this.stepAcc.size > 64 && this.stepAcc.clear();
     }
     movePlayerToSpawn() {
       const e = this.currentLevel === "city" ? dq[this.match.team] : yV[this.match.team];
@@ -30154,6 +30386,13 @@ void main() {
       const n = this.pickups.fixedUpdate(e, this.player.position, this.pickupEffects);
       n && this.audio.playPickup(n === "health");
       if (this.playerDown) return;
+      {
+        const w = this.weapons.current,
+          mi = w.config.moveInacc ?? 1.5,
+          sp = Math.min(this.player.horizontalSpeed / Mt.player.walkSpeed, 1.6);
+        let f = 1 + Math.pow(sp, 1.6) * mi;
+        (this.player.grounded || (f += 3 + mi * 1.5), this.player.crouching && (f *= 0.7), (w.inacc = f));
+      }
       const i = this.weapons.fixedUpdate(e, ss, bA, t.fire, t.aim, t.reload, this.raycastTargets);
       (i?.fired && this.applyShot(i),
         this.playerState.isDead &&
@@ -30162,10 +30401,15 @@ void main() {
     }
     update(e, t) {
       this.state === "playing" && this.quality.sample(e * 1e3);
-      const n = this.input.state.aim;
-      (this.rig.setAiming(n), this.weapons.setAiming(n));
+      const n = this.input.state.aim,
+        cw = this.weapons.current.config;
+      ((this.rig.adsFov = cw.scope || 0), this.rig.setAiming(n), this.weapons.setAiming(n));
+      const sc = !!(n && cw.scope && !this.weapons.isSwitching && !this.playerDown && this.rig.currentFov < 40);
+      sc !== this.scoped && ((this.scoped = sc), this.scopeEl.classList.toggle("is-on", sc), this.hud.crosshair.classList.toggle("is-hidden", sc));
+      this.updateFootsteps(e);
       const i = Math.min(this.player.horizontalSpeed / Mt.player.walkSpeed, 1.5);
-      (this.rig.updateBob(i, this.player.grounded, e),
+      ((SkyU.time.value += e),
+        this.rig.updateBob(i, this.player.grounded, e),
         ss.set(this.player.position.x, this.player.eyeHeight, this.player.position.z),
         this.playerDown ? this.updateDownCamera(e) : this.rig.apply(ss, e),
         this.weapons.update(e, i, this.player.grounded),
@@ -30190,7 +30434,7 @@ void main() {
       (this.post.enabled ? this.post.render() : this.renderer.render(this.scene, this.camera),
         (this.renderer.autoClear = !1),
         this.renderer.clearDepth(),
-        this.playerDown || this.renderer.render(this.weaponScene, this.weaponCamera),
+        this.playerDown || this.scoped || this.renderer.render(this.weaponScene, this.weaponCamera),
         (this.renderer.autoClear = !0),
         this.stats?.end());
     }
@@ -30517,7 +30761,7 @@ void main() {
       const n = this.weapons.current;
       (this.hud.setAmmo(n.ammoInMag, n.reserve, n.config.name),
         this.hud.setReload(n.reloadProgress),
-        this.hud.setSpread(t ? n.config.spread.ads : n.config.spread.hip),
+        this.hud.setSpread(n.spreadFor(t)),
         this.hud.setHealth(this.playerState.health, this.playerState.healthRatio, this.playerState.isCritical));
       if (this.isTeamRule) {
         this.updateRulesHud();
