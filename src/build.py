@@ -27,6 +27,16 @@ boot = '''<div id="boot"><b>載入中…</b><span>第一次開啟需要下載約
     </script>
     '''
 head = s[:a].replace('</style>', css + '\n</style>', 1)
+# 手機全螢幕：加入主畫面後以全螢幕、橫向開啟（iPhone 只能靠這個去掉網址列）
+pwa = '''<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CS FPS" />
+    <meta name="theme-color" content="#0b111a" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon-180.png" />'''
+head = head.replace('<meta name="viewport" content="width=device-width, initial-scale=1.0" />', pwa, 1)
 i = head.rindex('<script>')
 head = head[:i] + boot + head[i:]
 open(out, 'w', encoding='utf-8').write(head + '\n' + js + '\n' + s[b:])

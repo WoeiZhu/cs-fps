@@ -2,7 +2,14 @@
 <html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CS FPS" />
+    <meta name="theme-color" content="#0b111a" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon-180.png" />
     <title>Threejs FPS</title>
     <style>
 :root{color-scheme:dark;--accent: #7dd3fc;--ink: #e6edf3}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:#11151c;font-family:Segoe UI,system-ui,sans-serif;color:var(--ink)}#app{display:block;width:100vw;height:100vh}#hud{position:fixed;inset:0;pointer-events:none;user-select:none}.crosshair{--gap: 6px;position:absolute;left:50%;top:50%;width:0;height:0}.crosshair i{position:absolute;background:#ffffffe6;box-shadow:0 0 2px #000000f2;transition:transform .06s ease-out}.crosshair i:nth-child(1),.crosshair i:nth-child(2){width:2px;height:7px;left:-1px}.crosshair i:nth-child(1){top:calc(-1 * var(--gap) - 7px)}.crosshair i:nth-child(2){top:var(--gap)}.crosshair i:nth-child(3),.crosshair i:nth-child(4){height:2px;width:7px;top:-1px}.crosshair i:nth-child(3){left:calc(-1 * var(--gap) - 7px)}.crosshair i:nth-child(4){left:var(--gap)}.hitmarker{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0;transform:scale(1.6);transition:opacity .1s ease-out,transform .1s ease-out}.hitmarker.is-visible{opacity:1;transform:scale(1)}.hitmarker i{position:absolute;width:8px;height:2px;background:#f2f5f7;box-shadow:0 0 3px #000000e6}.hitmarker.is-headshot i{background:#ff5f52}.hitmarker i:nth-child(1){transform:rotate(45deg) translate(7px)}.hitmarker i:nth-child(2){transform:rotate(45deg) translate(-7px)}.hitmarker i:nth-child(3){transform:rotate(-45deg) translate(7px)}.hitmarker i:nth-child(4){transform:rotate(-45deg) translate(-7px)}.ammo{position:absolute;right:28px;bottom:22px;text-align:right;text-shadow:0 2px 6px rgba(0,0,0,.85)}.ammo__name{font-size:13px;letter-spacing:.12em;opacity:.6;margin-bottom:2px}.ammo__mag{font:700 44px/1 ui-monospace,Cascadia Mono,Consolas,monospace;color:var(--ink)}.ammo__mag.is-low{color:#fbbf24}.ammo__mag.is-empty{color:#f87171}.ammo__reserve{font:400 18px/1 ui-monospace,Consolas,monospace;opacity:.55;margin-left:6px}.reload{margin-top:8px;margin-left:auto;width:96px;height:3px;border-radius:2px;background:#e6edf329;opacity:0;transition:opacity .12s}.reload.is-active{opacity:1}.reload__fill{height:100%;width:0;border-radius:2px;background:var(--accent)}.health{position:absolute;left:28px;bottom:22px;width:210px;text-shadow:0 2px 6px rgba(0,0,0,.85)}.health__text{font:700 30px/1 ui-monospace,Cascadia Mono,Consolas,monospace}.health__bar{margin-top:6px;height:6px;border-radius:3px;background:#e6edf329;overflow:hidden}.health__fill{height:100%;width:100%;background:#4ade80;transition:width .15s ease-out,background-color .2s}.health__fill.is-critical{background:#f87171}.vignette{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,#c8141400 58%,#be0f0f80)}.vignette.is-visible{display:block}.wave{position:absolute;top:18px;left:50%;transform:translate(-50%);font:600 15px/1.4 Segoe UI,system-ui,sans-serif;letter-spacing:.1em;text-align:center;text-shadow:0 2px 8px rgba(0,0,0,.9);opacity:.85;white-space:pre-line}.score{position:absolute;top:44px;left:50%;transform:translate(-50%);font:700 26px/1 ui-monospace,Cascadia Mono,Consolas,monospace;color:var(--accent);text-shadow:0 2px 8px rgba(0,0,0,.9)}.readout{position:absolute;left:12px;top:62px;padding:8px 10px;font:12px/1.5 ui-monospace,Cascadia Mono,Consolas,monospace;white-space:pre;background:#080c128c;border:1px solid rgba(125,211,252,.18);border-radius:4px;color:var(--ink)}.overlay{position:absolute;inset:0;display:grid;place-items:center;background:#080c12c7;backdrop-filter:blur(3px);pointer-events:auto;cursor:pointer;transition:opacity .18s ease}.overlay.is-hidden{opacity:0;pointer-events:none}.overlay__panel{text-align:center;padding:32px 44px}.overlay__title{font-size:34px;font-weight:700;letter-spacing:.16em;color:var(--accent)}.overlay__hint{margin-top:10px;font-size:14px;opacity:.75}.overlay.is-gameover .overlay__title{color:#f87171}.overlay__stats{margin-top:22px}.overlay__score{font:700 52px/1 ui-monospace,Cascadia Mono,Consolas,monospace;color:var(--accent)}.overlay__rows{margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:14px 24px;min-width:min(520px,82vw);font:400 13px/1.5 Segoe UI,system-ui,sans-serif}.overlay__rows div{display:flex;flex-direction:column;gap:3px}.overlay__rows span{opacity:.55;font-size:12px}.overlay__rows b{font:600 18px/1 ui-monospace,Consolas,monospace}.overlay__keys{margin-top:26px;display:flex;gap:18px;flex-wrap:wrap;justify-content:center;font-size:12px;opacity:.6}.overlay__keys span{display:inline-flex;align-items:center;gap:6px}kbd{padding:2px 6px;border:1px solid rgba(230,237,243,.25);border-radius:3px;font:11px/1 ui-monospace,Consolas,monospace}.start{position:absolute;inset:0;display:grid;place-items:center;overflow-y:auto;padding:24px;background:#080c12e6;backdrop-filter:blur(4px);pointer-events:auto;transition:opacity .2s ease}.start.is-hidden{opacity:0;pointer-events:none}.start__panel{width:min(680px,100%)}.start__title{font-size:34px;font-weight:700;letter-spacing:.16em;color:var(--accent);text-align:center;margin-bottom:28px}.start__section{margin-bottom:20px}.start__label{font-size:12px;letter-spacing:.14em;opacity:.55;margin-bottom:8px}.start__row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.start__choice{display:flex;flex-direction:column;gap:3px;padding:11px 13px;text-align:left;cursor:pointer;color:var(--ink);background:#e6edf30d;border:1px solid rgba(230,237,243,.14);border-radius:5px;font-family:inherit;transition:border-color .12s,background-color .12s}.start__choice:hover:not(.is-disabled){background:#e6edf317}.start__choice.is-selected{border-color:var(--accent);background:#7dd3fc1f}.start__choice.is-disabled{opacity:.38;cursor:not-allowed}.start__choice b{font-size:14px;font-weight:600}.start__choice i{font-size:11px;font-style:normal;opacity:.6}.start__slider{display:flex;align-items:center;gap:14px}.start__slider input{flex:1;accent-color:var(--accent)}.start__value{font:12px/1 ui-monospace,Consolas,monospace;opacity:.75;white-space:nowrap}.start__note{font-size:11px;opacity:.45;margin:-6px 0 20px}.start__go{display:block;width:100%;padding:13px;font:600 15px/1 Segoe UI,system-ui,sans-serif;letter-spacing:.1em;color:#08121a;background:var(--accent);border:none;border-radius:5px;cursor:pointer;transition:filter .12s}.start__go:hover{filter:brightness(1.1)}.start__keys{margin-top:22px;display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:11px;opacity:.45}.start__keys span{display:inline-flex;align-items:center;gap:5px}.toast{position:absolute;top:84px;left:50%;transform:translate(-50%);padding:8px 14px;font-size:12px;background:#080c12d9;border:1px solid rgba(251,191,36,.4);border-radius:4px;color:#fbbf24;opacity:0;transition:opacity .3s}.toast.is-visible{opacity:1}
@@ -89,6 +96,15 @@ body.is-touch .start{place-items:start center}
 .bomb-bar{position:fixed;left:50%;top:58%;transform:translateX(-50%);width:min(260px,60vw);height:8px;border-radius:4px;background:rgba(0,0,0,.55);overflow:hidden;pointer-events:none}
 .bomb-bar i{display:block;height:100%;width:0;background:#ffcf4a}
 .use-btn{position:fixed;left:50%;top:63%;transform:translateX(-50%);pointer-events:auto;cursor:pointer;background:rgba(10,14,20,.78);color:#fff;border:1px solid rgba(255,207,74,.7);border-radius:8px;padding:10px 18px;font:700 15px/1 system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
+
+/* 手機直向提示、iPhone 全螢幕說明 */
+.rotate-hint{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#0b111af2;color:#e6edf3;font:600 18px/1.4 system-ui,sans-serif;text-align:center;padding:24px}
+.rotate-hint.is-on{display:flex}
+.rotate-hint span{font-weight:400;font-size:14px;color:#9aa4ae}
+.rotate-hint__icon{font-size:52px;animation:rotHint 1.8s ease-in-out infinite}
+@keyframes rotHint{0%,20%{transform:rotate(0)}50%,80%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+.ios-tip{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#7dd3fc1a;border:1px solid #7dd3fc55;color:#cfe8f7;font:400 13px/1.5 system-ui,sans-serif}
+.ios-tip b{display:block;color:#7dd3fc;margin-bottom:2px}
 
 </style>
   </head>
@@ -22270,6 +22286,9 @@ void main() {
       (this.cb.update(t, this.accumulator / Ba), this.cb.render());
     };
   }
+  const IsIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+    IsStandalone = () =>
+      navigator.standalone === !0 || matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches;
   const TouchMode = (() => {
       const q = new URLSearchParams(location.search).get("touch");
       if (q === "1") return !0;
@@ -22447,14 +22466,19 @@ void main() {
     requestLock() {
       if (this.touch) {
         if (this.locked) return;
-        const d = document.documentElement;
+        // 手機：開始遊戲時自動全螢幕並鎖定橫向（Android Chrome、iPad 可以；iPhone Safari 不支援，改用轉向提示）
+        const d = document.documentElement,
+          fs = d.requestFullscreen || d.webkitRequestFullscreen,
+          lockLand = () => {
+            try {
+              screen.orientation?.lock?.("landscape")?.catch?.(() => {});
+            } catch {}
+          };
         try {
-          !document.fullscreenElement &&
-            d.requestFullscreen &&
-            d
-              .requestFullscreen({ navigationUI: "hide" })
-              .then(() => screen.orientation?.lock?.("landscape"))
-              .catch(() => {});
+          if (!(document.fullscreenElement || document.webkitFullscreenElement) && fs) {
+            const r = fs.call(d, { navigationUI: "hide" });
+            r && r.then ? r.then(lockLand).catch(() => {}) : setTimeout(lockLand, 300);
+          } else lockLand();
         } catch {}
         (this.resetTouch(), (this.locked = !0), this.touchUi.classList.add("is-visible"), this.onLockChange?.(!0));
         return;
@@ -30634,6 +30658,10 @@ void main() {
         t.prepend(this.scopeEl),
         this.buildEconomyUi(t),
         this.buildBombUi(t),
+        (this.rotateEl = document.createElement("div")),
+        (this.rotateEl.className = "rotate-hint"),
+        (this.rotateEl.innerHTML = '<div class="rotate-hint__icon">📱</div><b>請把手機轉成橫向</b><span>轉過來後遊戲會自動繼續</span>'),
+        document.body.appendChild(this.rotateEl),
         (this.vignetteEl = document.createElement("div")),
         (this.vignetteEl.className = "vignette"),
         t.prepend(this.vignetteEl),
@@ -30645,6 +30673,8 @@ void main() {
           (this.restart(), (this.state = "menu"), this.menu.hide(), this.startMenu.show());
         }),
         (this.startMenu = new RV(t)),
+        TouchMode && IsIOS && !IsStandalone() && !(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen) && this.addIosTip(),
+        window.addEventListener("orientationchange", () => setTimeout(() => this.updateOrientation(), 250)),
         (this.startMenu.onStart = (l, f) => {
           (this.applyMatch(l),
             this.quality.setLevel(f),
@@ -30804,6 +30834,27 @@ void main() {
     }
     scoped = !1;
     stepAcc = new Map();
+    rotateOn = !1;
+    rotatePaused = !1;
+    // 直向時蓋上「請轉橫向」並暫停；轉回橫向自動繼續
+    updateOrientation() {
+      if (!TouchMode) return;
+      const portrait = window.innerHeight > window.innerWidth * 1.05,
+        on = portrait && this.state !== "menu";
+      if (on === this.rotateOn) return;
+      ((this.rotateOn = on), this.rotateEl.classList.toggle("is-on", on));
+      on
+        ? this.input.isLocked && ((this.rotatePaused = !0), this.input.releaseLock())
+        : this.rotatePaused && ((this.rotatePaused = !1), this.state === "paused" && this.input.requestLock());
+    }
+    addIosTip() {
+      const panel = this.startMenu.root.querySelector(".start__panel"),
+        tip = document.createElement("div");
+      ((tip.className = "ios-tip"),
+        (tip.innerHTML =
+          "<b>想要全螢幕？</b>iPhone 的 Safari 不允許網頁自動全螢幕。請點下方的「分享」按鈕 → 「加入主畫面」，之後從主畫面的圖示開啟，就沒有網址列，轉成橫向即可遊玩。"),
+        panel && panel.insertBefore(tip, panel.children[1] ?? null));
+    }
     bomb = { state: "none", carrier: null, pos: new E(), site: null, timer: 0, prog: 0, beep: 0, target: "A" };
     useHeld = !1;
     get bombSites() {
@@ -31182,7 +31233,7 @@ void main() {
       ((this.rig.adsFov = cw.scope || 0), this.rig.setAiming(n), this.weapons.setAiming(n));
       const sc = !!(n && cw.scope && !this.weapons.isSwitching && !this.playerDown && this.rig.currentFov < 40);
       sc !== this.scoped && ((this.scoped = sc), this.scopeEl.classList.toggle("is-on", sc), this.hud.crosshair.classList.toggle("is-hidden", sc));
-      (this.updateFootsteps(e), this.updateEconomyUi(), this.updateBombUi(e));
+      (this.updateFootsteps(e), this.updateEconomyUi(), this.updateBombUi(e), this.updateOrientation());
       const i = Math.min(this.player.horizontalSpeed / Mt.player.walkSpeed, 1.5);
       ((SkyU.time.value += e),
         this.rig.updateBob(i, this.player.grounded, e),

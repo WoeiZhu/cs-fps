@@ -22158,6 +22158,9 @@ void main() {
       (this.cb.update(t, this.accumulator / Ba), this.cb.render());
     };
   }
+  const IsIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+    IsStandalone = () =>
+      navigator.standalone === !0 || matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches;
   const TouchMode = (() => {
       const q = new URLSearchParams(location.search).get("touch");
       if (q === "1") return !0;
@@ -22335,14 +22338,19 @@ void main() {
     requestLock() {
       if (this.touch) {
         if (this.locked) return;
-        const d = document.documentElement;
+        // 手機：開始遊戲時自動全螢幕並鎖定橫向（Android Chrome、iPad 可以；iPhone Safari 不支援，改用轉向提示）
+        const d = document.documentElement,
+          fs = d.requestFullscreen || d.webkitRequestFullscreen,
+          lockLand = () => {
+            try {
+              screen.orientation?.lock?.("landscape")?.catch?.(() => {});
+            } catch {}
+          };
         try {
-          !document.fullscreenElement &&
-            d.requestFullscreen &&
-            d
-              .requestFullscreen({ navigationUI: "hide" })
-              .then(() => screen.orientation?.lock?.("landscape"))
-              .catch(() => {});
+          if (!(document.fullscreenElement || document.webkitFullscreenElement) && fs) {
+            const r = fs.call(d, { navigationUI: "hide" });
+            r && r.then ? r.then(lockLand).catch(() => {}) : setTimeout(lockLand, 300);
+          } else lockLand();
         } catch {}
         (this.resetTouch(), (this.locked = !0), this.touchUi.classList.add("is-visible"), this.onLockChange?.(!0));
         return;
@@ -30522,6 +30530,10 @@ void main() {
         t.prepend(this.scopeEl),
         this.buildEconomyUi(t),
         this.buildBombUi(t),
+        (this.rotateEl = document.createElement("div")),
+        (this.rotateEl.className = "rotate-hint"),
+        (this.rotateEl.innerHTML = '<div class="rotate-hint__icon">📱</div><b>請把手機轉成橫向</b><span>轉過來後遊戲會自動繼續</span>'),
+        document.body.appendChild(this.rotateEl),
         (this.vignetteEl = document.createElement("div")),
         (this.vignetteEl.className = "vignette"),
         t.prepend(this.vignetteEl),
@@ -30533,6 +30545,8 @@ void main() {
           (this.restart(), (this.state = "menu"), this.menu.hide(), this.startMenu.show());
         }),
         (this.startMenu = new RV(t)),
+        TouchMode && IsIOS && !IsStandalone() && !(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen) && this.addIosTip(),
+        window.addEventListener("orientationchange", () => setTimeout(() => this.updateOrientation(), 250)),
         (this.startMenu.onStart = (l, f) => {
           (this.applyMatch(l),
             this.quality.setLevel(f),
@@ -30692,6 +30706,27 @@ void main() {
     }
     scoped = !1;
     stepAcc = new Map();
+    rotateOn = !1;
+    rotatePaused = !1;
+    // 直向時蓋上「請轉橫向」並暫停；轉回橫向自動繼續
+    updateOrientation() {
+      if (!TouchMode) return;
+      const portrait = window.innerHeight > window.innerWidth * 1.05,
+        on = portrait && this.state !== "menu";
+      if (on === this.rotateOn) return;
+      ((this.rotateOn = on), this.rotateEl.classList.toggle("is-on", on));
+      on
+        ? this.input.isLocked && ((this.rotatePaused = !0), this.input.releaseLock())
+        : this.rotatePaused && ((this.rotatePaused = !1), this.state === "paused" && this.input.requestLock());
+    }
+    addIosTip() {
+      const panel = this.startMenu.root.querySelector(".start__panel"),
+        tip = document.createElement("div");
+      ((tip.className = "ios-tip"),
+        (tip.innerHTML =
+          "<b>想要全螢幕？</b>iPhone 的 Safari 不允許網頁自動全螢幕。請點下方的「分享」按鈕 → 「加入主畫面」，之後從主畫面的圖示開啟，就沒有網址列，轉成橫向即可遊玩。"),
+        panel && panel.insertBefore(tip, panel.children[1] ?? null));
+    }
     bomb = { state: "none", carrier: null, pos: new E(), site: null, timer: 0, prog: 0, beep: 0, target: "A" };
     useHeld = !1;
     get bombSites() {
@@ -31070,7 +31105,7 @@ void main() {
       ((this.rig.adsFov = cw.scope || 0), this.rig.setAiming(n), this.weapons.setAiming(n));
       const sc = !!(n && cw.scope && !this.weapons.isSwitching && !this.playerDown && this.rig.currentFov < 40);
       sc !== this.scoped && ((this.scoped = sc), this.scopeEl.classList.toggle("is-on", sc), this.hud.crosshair.classList.toggle("is-hidden", sc));
-      (this.updateFootsteps(e), this.updateEconomyUi(), this.updateBombUi(e));
+      (this.updateFootsteps(e), this.updateEconomyUi(), this.updateBombUi(e), this.updateOrientation());
       const i = Math.min(this.player.horizontalSpeed / Mt.player.walkSpeed, 1.5);
       ((SkyU.time.value += e),
         this.rig.updateBob(i, this.player.grounded, e),
