@@ -26769,6 +26769,12 @@ diffuseColor.rgb *= 0.9 + 0.1 * sHash(floor(vSPos * 260.0)) + 0.12 * (sNoise(vSP
           (this.doFollow(e, n, t), e.syncTransform());
           return;
         }
+        if (e.objective && this.ctx.nav.graph) {
+          // 沒有活著的敵人也要去目標點（例如去拆彈）
+          ((this.target = null), (e.timeSinceSeen += t), lt.set(0, 0, -1));
+          (this.routeDir(e, t) ? e.settle(t) : this.moveWithUnstick(e, t), e.syncTransform());
+          return;
+        }
         (e.settle(t), this.transition(e, "idle"));
         return;
       }
@@ -26881,18 +26887,49 @@ diffuseColor.rgb *= 0.9 + 0.1 * sHash(floor(vSPos * 260.0)) + 0.12 * (sNoise(vSP
         (this.transition(e, "attack"), e.settle(n));
         return;
       }
-      (this.routeDir(e, n), this.moveWithUnstick(e, n));
+      const face = Math.atan2(-lt.x, -lt.z);
+      if (this.routeDir(e, n)) {
+        ((e.atObjective = !0), e.settle(n), (e.facing = face));
+        return;
+      }
+      ((e.atObjective = !1), this.moveWithUnstick(e, n));
     }
     // 看不到目標時沿路網走（先走自己分配到的路線），看得到就直接衝
     routeDir(e, dt) {
       const G = this.ctx.nav.graph,
         tg = this.target;
-      if (!G || !tg) return;
+      if (!G || (!tg && !e.objective)) return;
       if (e.timeSinceSeen === 0) {
         ((e.laneDone = !0), (e.navPath = null));
-        return;
+        return !1;
       }
-      const p = e.position;
+      const p = e.position,
+        ob = e.objective;
+      if (ob && e.laneDone !== !1 || (ob && !e.laneRoute?.length)) {
+        // 爆破模式：沒看到人時去目標點（包點、炸彈），到了就蹲點守
+        const d2 = (p.x - ob.x) ** 2 + (p.z - ob.z) ** 2;
+        if (d2 < 1.4) return !0;
+        if (d2 < 49 && this.ctx.nav.hasLineOfSight(Ir.set(p.x, 1, p.z), _a.set(ob.x, 1, ob.z))) {
+          (lt.set(ob.x - p.x, 0, ob.z - p.z), lt.normalize());
+          return !1;
+        }
+        if (((e.navTimer = (e.navTimer ?? 0) - dt), !e.navPath || e.navTimer <= 0)) {
+          e.navTimer = 1.5;
+          const from = G.nearest(p),
+            goal = G.nearest(ob);
+          e.navPath = G.path(from, goal);
+          if (e.navPath.length > 1) {
+            const a = G.pts[e.navPath[0]],
+              b = G.pts[e.navPath[1]];
+            (p.x - b.x) ** 2 + (p.z - b.z) ** 2 < (a.x - b.x) ** 2 + (a.z - b.z) ** 2 && e.navPath.shift();
+          }
+        }
+        const path = e.navPath;
+        for (; path.length && (p.x - G.pts[path[0]].x) ** 2 + (p.z - G.pts[path[0]].z) ** 2 < 2.6; ) path.shift();
+        const w = path.length ? G.pts[path[0]] : ob;
+        (lt.set(w.x - p.x, 0, w.z - p.z), lt.lengthSq() > 1e-4 && lt.normalize());
+        return !1;
+      }
       if (!e.laneDone && e.laneRoute && e.laneRoute.length) {
         // 照分配到的路線走：到點就換下一點，走完路線才改成直接找人
         const R = e.laneRoute;
@@ -26909,6 +26946,7 @@ diffuseColor.rgb *= 0.9 + 0.1 * sHash(floor(vSPos * 260.0)) + 0.12 * (sNoise(vSP
           return;
         }
       }
+      if (!tg) return;
       if (((e.navTimer = (e.navTimer ?? 0) - dt), !e.navPath || e.navTimer <= 0)) {
         e.navTimer = 1.2 + Math.random() * 0.6;
         const from = G.nearest(p),
@@ -28721,6 +28759,42 @@ diffuseColor.rgb *= 0.9 + 0.1 * sHash(floor(vSPos * 260.0)) + 0.12 * (sNoise(vSP
       (this.material.dispose(), this._fsQuad.dispose());
     }
   }
+  const BombRoundTime = 115,
+    BombFuse = 40,
+    PlantTime = 3,
+    DefuseTime = 6,
+    BombSites = {
+      city: { A: { x: -20, z: -31, r: 5.5 }, B: { x: -25, z: 20, r: 5.5 } },
+      test: { A: { x: -12, z: -12, r: 5 }, B: { x: -12, z: 12, r: 5 } },
+    },
+    // T 方前往各包點時可以選的「途經點」：走後巷或從中路轉進小巷
+    BombVia = { A: ["Nd", "Nd", "G1", "N2"], B: ["H2", "H2", "H1", "S1"] };
+  function siteDecal(letter) {
+    const cv = document.createElement("canvas");
+    ((cv.width = 256), (cv.height = 256));
+    const g = cv.getContext("2d");
+    if (g) {
+      ((g.strokeStyle = "rgba(230,190,40,0.85)"), (g.lineWidth = 7), g.setLineDash([22, 14]));
+      (g.beginPath(), g.arc(128, 128, 118, 0, Math.PI * 2), g.stroke());
+      ((g.fillStyle = "rgba(185,40,30,0.5)"), (g.font = "bold 120px sans-serif"), (g.textAlign = "center"), (g.textBaseline = "middle"));
+      g.fillText(letter, 128, 136);
+    }
+    const t = new yh(cv);
+    t.colorSpace = qt;
+    const m = new ot(
+      new Oi(1, 1).rotateX(-Math.PI / 2),
+      new Yt({ map: t, transparent: !0, depthWrite: !1, polygonOffset: !0, polygonOffsetFactor: -2 }),
+    );
+    return ((m.renderOrder = 2), m);
+  }
+  function bombMesh() {
+    const g = new gt(),
+      body = new ot(new Rt(0.34, 0.13, 0.24), new mt({ color: 0x3b4a2e, roughness: 0.7 })),
+      pad = new ot(new Rt(0.16, 0.02, 0.12), new mt({ color: 0x111111, roughness: 0.4 })),
+      led = new ot(new Io(0.025, 8, 6), new Yt({ color: 0xff2a1a }));
+    (body.position.y = 0.065, pad.position.set(-0.05, 0.14, 0), led.position.set(0.1, 0.15, 0.05), (body.castShadow = !0));
+    return (g.add(body, pad, led), (g.userData.led = led), g);
+  }
   const BuyTime = 20,
     ShopItems = [
       { id: "armor", name: "防彈衣＋頭盔", desc: "承受傷害減半", price: 1e3 },
@@ -28976,6 +29050,38 @@ void main(){
           l.start(s + d),
           l.stop(s + d + 0.2));
       }
+    }
+    playBeep(k = 1, dist = 0) {
+      const t = this.ctx,
+        n = this.master;
+      if (!t || !n) return;
+      const s = t.currentTime,
+        o = t.createOscillator(),
+        g = t.createGain(),
+        v = Math.max(0.05, 1 - dist / 60) * 0.18 * k;
+      ((o.type = "square"), (o.frequency.value = 2400), g.gain.setValueAtTime(v, s), g.gain.exponentialRampToValueAtTime(1e-4, s + 0.09 * k));
+      (o.connect(g).connect(n), o.start(s), o.stop(s + 0.1 * k));
+    }
+    playBoom(dist = 0) {
+      const t = this.ctx,
+        n = this.master,
+        i = this.noise;
+      if (!t || !n || !i) return;
+      const s = t.currentTime,
+        v = Math.max(0.25, 1 - dist / 120);
+      for (let k = 0; k < 3; k++) {
+        const l = t.createBufferSource();
+        ((l.buffer = i), (l.playbackRate.value = 0.35 + k * 0.15));
+        const f = t.createBiquadFilter();
+        ((f.type = "lowpass"), f.frequency.setValueAtTime(1800, s), f.frequency.exponentialRampToValueAtTime(90, s + 1.8));
+        const c = t.createGain();
+        (c.gain.setValueAtTime(1.1 * v, s + k * 0.04), c.gain.exponentialRampToValueAtTime(1e-4, s + 2.2));
+        (l.connect(f).connect(c).connect(n), l.start(s + k * 0.04), l.stop(s + 2.3));
+      }
+      const o = t.createOscillator(),
+        g = t.createGain();
+      ((o.type = "sine"), o.frequency.setValueAtTime(70, s), o.frequency.exponentialRampToValueAtTime(28, s + 1.2));
+      (g.gain.setValueAtTime(0.9 * v, s), g.gain.exponentialRampToValueAtTime(1e-4, s + 1.4), o.connect(g).connect(n), o.start(s), o.stop(s + 1.5));
     }
     playStep(g, pan, enemy) {
       const t = this.ctx,
@@ -29980,6 +30086,7 @@ void main() {
           this.section("玩法", [
             this.choice("rule", "infinite", "無限模式", "陣亡 3 秒後在己方重生，永不結束", !0),
             this.choice("rule", "round", "單局模式", "陣亡後觀戰，等某一方全滅才開下一局", !1),
+            this.choice("rule", "bomb", "爆破模式", "紅隊安裝炸彈、藍隊守點拆彈（CS 經典）", !1),
             this.choice("rule", "waves", "波次生存", "原本的玩法：一波波敵人，死亡即結束", !1),
           ]),
         ),
@@ -29991,8 +30098,8 @@ void main() {
         ),
         t.appendChild(
           this.section("隊伍", [
-            this.choice("team", "blue", gA.blue, "從南側進場", !0),
-            this.choice("team", "red", gA.red, "從北側進場", !1),
+            this.choice("team", "blue", gA.blue, "西側出生｜爆破模式為防守方", !0),
+            this.choice("team", "red", gA.red, "東側出生｜爆破模式為進攻方", !1),
           ]),
         ),
         (this.soloOptions = document.createElement("div")),
@@ -30414,6 +30521,7 @@ void main() {
         (this.scopeEl.className = "scope"),
         t.prepend(this.scopeEl),
         this.buildEconomyUi(t),
+        this.buildBombUi(t),
         (this.vignetteEl = document.createElement("div")),
         (this.vignetteEl.className = "vignette"),
         t.prepend(this.vignetteEl),
@@ -30462,7 +30570,10 @@ void main() {
         ));
     }
     get isTeamRule() {
-      return this.match.rule === "infinite" || this.match.rule === "round";
+      return this.match.rule === "infinite" || this.match.rule === "round" || this.match.rule === "bomb";
+    }
+    get isRoundRule() {
+      return this.match.rule === "round" || this.match.rule === "bomb";
     }
     get decalCount() {
       return this.decals.mesh.count;
@@ -30581,6 +30692,212 @@ void main() {
     }
     scoped = !1;
     stepAcc = new Map();
+    bomb = { state: "none", carrier: null, pos: new E(), site: null, timer: 0, prog: 0, beep: 0, target: "A" };
+    useHeld = !1;
+    get bombSites() {
+      return BombSites[this.currentLevel] ?? BombSites.city;
+    }
+    inSite(p) {
+      for (const k of ["A", "B"]) {
+        const S = this.bombSites[k];
+        if ((p.x - S.x) ** 2 + (p.z - S.z) ** 2 < S.r * S.r) return k;
+      }
+      return null;
+    }
+    ensureSiteMarkers() {
+      if (this.siteMarks && this.siteMarks.level === this.currentLevel) return;
+      this.siteMarks?.group.removeFromParent();
+      const grp = new gt();
+      for (const k of ["A", "B"]) {
+        const S = this.bombSites[k],
+          m = siteDecal(k);
+        (m.scale.set(S.r * 2, 1, S.r * 2), m.position.set(S.x, -0.12, S.z), grp.add(m));
+      }
+      ((this.siteMarks = { group: grp, level: this.currentLevel }), this.scene.add(grp));
+    }
+    bombStartRound() {
+      this.ensureSiteMarkers();
+      const B = this.bomb,
+        reds = this.roster.members.filter((m) => m.team === "red" && !m.isDead);
+      ((B.state = "carried"),
+        (B.site = null),
+        (B.prog = 0),
+        (B.timer = BombFuse),
+        (B.target = Math.random() < 0.5 ? "A" : "B"),
+        (B.carrier = reds.includes(this.playerCombatant) ? this.playerCombatant : reds[Math.floor(Math.random() * reds.length)] ?? null),
+        this.bombObj || ((this.bombObj = bombMesh()), this.scene.add(this.bombObj)),
+        (this.bombObj.visible = !1),
+        (this.siteMarks.group.visible = !0));
+      const G = this.enemies.nav.graph;
+      for (const b of this.enemies.enemies) {
+        if (b.hp <= 0) continue;
+        if (((b.laneDone = !1), (b.navPath = null), (b.atObjective = !1), !G)) continue;
+        const S = this.bombSites[b.team === "red" ? B.target : Math.random() < 0.5 ? "A" : "B"],
+          goal = G.nearest(S);
+        if (b.team === "red") {
+          const vias = BombVia[B.target],
+            via = G.ids.indexOf(vias[Math.floor(Math.random() * vias.length)]),
+            from = G.nearest(b.position);
+          b.laneRoute = via >= 0 ? G.path(from, via).concat(G.path(via, goal).slice(1)) : G.path(from, goal);
+        } else b.laneRoute = G.path(G.nearest(b.position), goal);
+        b.defendSite = S;
+      }
+    }
+    bombFixedUpdate(dt) {
+      const B = this.bomb,
+        me = this.playerCombatant,
+        P = this.player.position;
+      if (B.state === "carried") {
+        const c = B.carrier;
+        !c || c.isDead
+          ? c
+            ? ((B.state = "dropped"), B.pos.set(c.position.x, 0, c.position.z), (B.carrier = null), c === me ? this.hud.showToast("你陣亡了，炸彈掉在地上") : this.hud.showToast("炸彈掉在地上"))
+            : (B.state = "dropped")
+          : B.pos.set(c.position.x, 0, c.position.z);
+      }
+      if (B.state === "dropped")
+        for (const m of this.roster.members)
+          if (m.team === "red" && !m.isDead && (m.position.x - B.pos.x) ** 2 + (m.position.z - B.pos.z) ** 2 < 1.6) {
+            ((B.state = "carried"), (B.carrier = m), m === me && this.hud.showToast("撿到炸彈了，帶去 A 或 B 點安裝"));
+            break;
+          }
+      // 安裝
+      if (B.state === "carried" && B.carrier) {
+        const c = B.carrier,
+          site = this.inSite(c.position);
+        let planting = !1;
+        site &&
+          (c === me
+            ? (planting = this.useHeld && this.player.horizontalSpeed < 1.2 && !this.playerDown)
+            : (planting = c.timeSinceSeen > 0.8 && Math.hypot(c.velocity.x, c.velocity.z) < 0.8));
+        if (planting) {
+          if (((B.prog += dt), B.prog >= PlantTime)) {
+            ((B.state = "planted"), (B.site = site), (B.timer = BombFuse), (B.carrier = null), (B.prog = 0), B.pos.set(c.position.x, 0, c.position.z));
+            (this.hud.showToast(`炸彈已安裝於 ${site} 點！`), this.audio.playBeep?.(1.6), c === me && this.earn(300, "安裝炸彈"));
+            for (const b of this.enemies.enemies) ((b.navPath = null), (b.laneDone = !0));
+          }
+        } else B.prog = 0;
+      }
+      // 倒數、拆除
+      if (B.state === "planted") {
+        ((B.timer -= dt), (B.beep -= dt));
+        B.beep <= 0 && ((B.beep = Math.max(0.12, (B.timer / BombFuse) * 1.1)), this.audio.playBeep?.(1, B.pos.distanceTo(P)));
+        if (B.timer <= 0) return this.explodeBomb();
+        let def = null;
+        for (const m of this.roster.members) {
+          if (m.team !== "blue" || m.isDead) continue;
+          if ((m.position.x - B.pos.x) ** 2 + (m.position.z - B.pos.z) ** 2 > 2.6) continue;
+          if (m === me ? this.useHeld && !this.playerDown : m.timeSinceSeen > 0.6) {
+            def = m;
+            break;
+          }
+        }
+        def && def === B.defuser ? (B.prog += dt) : ((B.prog = def ? dt : 0), (B.defuser = def));
+        if (def && B.prog >= DefuseTime) {
+          ((B.state = "defused"), (B.prog = 0), def === me && this.earn(300, "拆除炸彈"), this.audio.playPickup?.(!0));
+          return this.endRound("blue", "炸彈已拆除");
+        }
+      }
+      // 電腦的目標點
+      this.updateBombObjectives();
+    }
+    updateBombObjectives() {
+      const B = this.bomb;
+      let k = 0;
+      for (const b of this.enemies.enemies) {
+        if (b.hp <= 0) continue;
+        k++;
+        const ring = (r) => (b.objective ??= new E()).set(B.pos.x + Math.cos(k * 2.1) * r, 0, B.pos.z + Math.sin(k * 2.1) * r);
+        if (B.state === "planted") {
+          if (b.team === "red") ring(4.5);
+          else {
+            // 最近的反恐去拆，其餘的在旁邊掩護
+            const d = b.position.distanceTo(B.pos),
+              near = this.enemies.enemies.every((o) => o === b || o.hp <= 0 || o.team !== "blue" || o.position.distanceTo(B.pos) >= d);
+            near ? (b.objective ??= new E()).copy(B.pos) : ring(5);
+          }
+        } else if (b.team === "red") {
+          const S = this.bombSites[B.target];
+          B.state === "dropped" && this.enemies.enemies.find((o) => o.hp > 0 && o.team === "red") === b
+            ? (b.objective ??= new E()).copy(B.pos)
+            : B.carrier === b
+              ? (b.objective ??= new E()).set(S.x, 0, S.z)
+              : (b.objective ??= new E()).set(S.x + Math.cos(k * 2.1) * 3.5, 0, S.z + Math.sin(k * 2.1) * 3.5);
+        } else {
+          const S = b.defendSite ?? this.bombSites.A;
+          (b.objective ??= new E()).set(S.x + Math.cos(k * 2.4) * 3, 0, S.z + Math.sin(k * 2.4) * 3);
+        }
+      }
+    }
+    explodeBomb() {
+      const B = this.bomb,
+        R = 16,
+        P = B.pos.clone().setY(0.6);
+      B.state = "exploded";
+      for (let i = 0; i < 14; i++) {
+        const v = new E((Math.random() - 0.5) * 6, 2 + Math.random() * 4, (Math.random() - 0.5) * 6);
+        (this.smokeFx.spawn(P, v, 1.6 + Math.random() * 1.5, 2.5 + Math.random() * 2, i < 5 ? 16754500 : 5592405, 0.85, 2.2, -0.4, 1.4, (Math.random() - 0.5) * 2),
+          i < 6 && this.flashFx.spawn(P.clone().add(v.multiplyScalar(0.3)), null, 3 + Math.random() * 3, 0.25, 16772829, 1));
+      }
+      (this.muzzleLights.flash(P, 400), this.audio.playBoom?.(B.pos.distanceTo(this.player.position)));
+      for (const m of this.roster.members) {
+        if (m.isDead) continue;
+        const d = m.position.distanceTo(B.pos);
+        if (d > R) continue;
+        const dmg = 500 * (1 - d / R) ** 1.3;
+        m === this.playerCombatant
+          ? (this.playerState.takeDamage(this.absorbArmor(dmg)), (this.damagedThisFrame = !0))
+          : m.takeDamage?.(dmg, "body", m.position.clone().setY(1.2), null, new E(m.position.x - B.pos.x, 0.3, m.position.z - B.pos.z).normalize());
+      }
+      (this.bombObj && (this.bombObj.visible = !1), this.endRound("red", "炸彈爆炸"));
+    }
+    updateBombUi(dt) {
+      const bm = this.match.rule === "bomb" && this.state !== "menu";
+      if ((this.bombObj && (this.bombObj.visible = bm && (this.bomb.state === "dropped" || this.bomb.state === "planted")), this.siteMarks && (this.siteMarks.group.visible = bm), !bm))
+        return ((this.bombInfo.style.display = "none"), (this.useBtn.style.display = "none"), (this.bombBar.style.display = "none"));
+      const B = this.bomb,
+        me = this.playerCombatant;
+      if (this.bombObj && this.bombObj.visible) {
+        (this.bombObj.position.copy(B.pos), (this.bombObj.position.y = -0.15));
+        const on = B.state === "planted" && B.beep > Math.max(0.12, (B.timer / BombFuse) * 1.1) - 0.08;
+        this.bombObj.userData.led.material.color.setHex(on || B.state === "dropped" ? 0xff2a1a : 0x401010);
+      }
+      let t;
+      B.state === "planted"
+        ? (t = `💣 炸彈在 ${B.site} 點　${Math.ceil(B.timer)} 秒`)
+        : B.state === "dropped"
+          ? (t = "💣 炸彈掉在地上")
+          : B.carrier === me
+            ? (t = `💣 你帶著炸彈：前往 A 或 B 點，按住 E 安裝`)
+            : B.state === "carried"
+              ? (t = me.team === "red" ? `💣 ${B.carrier?.name ?? "隊友"} 帶著炸彈` : "保護 A、B 點")
+              : (t = "");
+      t !== this.lastBombText && ((this.lastBombText = t), (this.bombInfo.textContent = t));
+      ((this.bombInfo.style.display = t ? "" : "none"), this.bombInfo.classList.toggle("is-hot", B.state === "planted"));
+      const P = this.player.position,
+        canPlant = B.state === "carried" && B.carrier === me && this.inSite(P),
+        canDefuse = B.state === "planted" && me.team === "blue" && (P.x - B.pos.x) ** 2 + (P.z - B.pos.z) ** 2 < 2.6,
+        can = !this.playerDown && !this.roundOver && (canPlant || canDefuse);
+      ((this.useBtn.style.display = can ? "" : "none"), can && (this.useBtn.textContent = canPlant ? "按住 E 安裝炸彈" : "按住 E 拆除炸彈"));
+      const showBar = can && this.useHeld && B.prog > 0;
+      ((this.bombBar.style.display = showBar ? "" : "none"),
+        showBar && (this.bombBar.firstChild.style.width = `${Math.min(100, (B.prog / (canPlant ? PlantTime : DefuseTime)) * 100)}%`));
+    }
+    buildBombUi(root) {
+      ((this.bombInfo = document.createElement("div")), (this.bombInfo.className = "bomb-info"), root.appendChild(this.bombInfo));
+      ((this.bombBar = document.createElement("div")), (this.bombBar.className = "bomb-bar"), (this.bombBar.innerHTML = "<i></i>"), root.appendChild(this.bombBar));
+      ((this.useBtn = document.createElement("button")), (this.useBtn.className = "use-btn"), root.appendChild(this.useBtn));
+      const down = (ev) => (ev.stopPropagation(), ev.preventDefault(), (this.useHeld = !0)),
+        up = () => (this.useHeld = !1);
+      (this.useBtn.addEventListener("pointerdown", down),
+        this.useBtn.addEventListener("pointerup", up),
+        this.useBtn.addEventListener("pointerleave", up),
+        this.useBtn.addEventListener("touchstart", (ev) => (ev.stopPropagation(), (this.useHeld = !0)), { passive: !0 }),
+        this.useBtn.addEventListener("touchend", (ev) => (ev.stopPropagation(), (this.useHeld = !1))),
+        window.addEventListener("keydown", (ev) => ev.code === "KeyE" && (this.useHeld = !0)),
+        window.addEventListener("keyup", (ev) => ev.code === "KeyE" && (this.useHeld = !1)),
+        window.addEventListener("blur", up));
+    }
     money = 0;
     lossStreak = 0;
     buyTimer = 0;
@@ -30753,7 +31070,7 @@ void main() {
       ((this.rig.adsFov = cw.scope || 0), this.rig.setAiming(n), this.weapons.setAiming(n));
       const sc = !!(n && cw.scope && !this.weapons.isSwitching && !this.playerDown && this.rig.currentFov < 40);
       sc !== this.scoped && ((this.scoped = sc), this.scopeEl.classList.toggle("is-on", sc), this.hud.crosshair.classList.toggle("is-hidden", sc));
-      (this.updateFootsteps(e), this.updateEconomyUi());
+      (this.updateFootsteps(e), this.updateEconomyUi(), this.updateBombUi(e));
       const i = Math.min(this.player.horizontalSpeed / Mt.player.walkSpeed, 1.5);
       ((SkyU.time.value += e),
         this.rig.updateBob(i, this.player.grounded, e),
@@ -30822,7 +31139,11 @@ void main() {
         this.hud.clearKills(),
         this.startRound(),
         this.hud.showToast(
-          this.match.rule === "infinite" ? "無限模式：陣亡 3 秒後重生" : "單局模式：陣亡後需等待一方全滅",
+          this.match.rule === "infinite"
+            ? "無限模式：陣亡 3 秒後重生"
+            : this.match.rule === "bomb"
+              ? "爆破模式：紅隊進攻安裝炸彈，藍隊防守拆彈"
+              : "單局模式：陣亡後需等待一方全滅",
         ));
     }
     teamBase(e) {
@@ -30862,7 +31183,7 @@ void main() {
         (i.laneDone = !1),
         (i.navPath = null),
         (i.spawnShield = SpawnShield),
-        (i.corpseLinger = this.match.rule === "round" ? 1e9 : 8),
+        (i.corpseLinger = this.isRoundRule ? 1e9 : 8),
         (i.name = `${KindName[t]} ${++this.botSerial}`));
       const a = this.teamBase(e);
       return ((i.facing = a.yaw), i.syncTransform(), this.rebuildRaycastTargets(), i);
@@ -30883,8 +31204,17 @@ void main() {
       for (let i = 1; i < n; i++) this.spawnTeamBot(e, i % 3 === 2 ? "ranged" : "grunt", this.spawnSlot(e, i));
       for (let i = 0; i < n; i++) this.spawnTeamBot(t, i % 3 === 2 ? "ranged" : "grunt", this.spawnSlot(t, i));
       (this.rebuildRaycastTargets(),
-        this.match.rule === "round" &&
-          (this.hud.showCenter(`第 ${this.round} 局`, `${n} 對 ${n}　殲滅所有敵人`, "is-round"),
+        this.match.rule === "bomb" && this.bombStartRound(),
+        this.isRoundRule &&
+          (this.hud.showCenter(
+            `第 ${this.round} 局`,
+            this.match.rule === "bomb"
+              ? e === "red"
+                ? "進攻：把炸彈帶到 A 或 B 點，按住 E 安裝"
+                : "防守：守住 A、B 兩點，炸彈被裝就去拆（按住 E）"
+              : `${n} 對 ${n}　殲滅所有敵人`,
+            "is-round",
+          ),
           (this.roundBanner = 2.2)),
         this.audio.playWaveStart());
     }
@@ -30958,17 +31288,30 @@ void main() {
       this.roundTimer += e;
       const t = this.roster.aliveOf("blue"),
         n = this.roster.aliveOf("red");
+      if (this.match.rule === "bomb") {
+        this.bombFixedUpdate(e);
+        if (this.roundOver) return;
+        const B = this.bomb;
+        B.state === "planted"
+          ? t === 0 && this.endRound("red", "防守方全滅")
+          : n === 0
+            ? this.endRound("blue", "進攻方全滅")
+            : t === 0
+              ? this.endRound("red", "防守方全滅")
+              : this.roundTimer >= BombRoundTime && this.endRound("blue", "時間到，炸彈未安裝");
+        return;
+      }
       (t === 0 || n === 0 || this.roundTimer >= RoundLimit) &&
         this.endRound(t === n ? null : t > n ? "blue" : "red");
     }
-    endRound(e) {
+    endRound(e, why = "") {
       ((this.roundOver = !0), (this.roundEndTimer = RoundBreak), e && (this.teamScore[e] += 1));
       e === this.match.team
         ? ((this.lossStreak = 0), this.earn(3250, "回合勝利"))
         : ((this.lossStreak = Math.min((this.lossStreak ?? 0) + 1, 4)), this.earn(1400 + (this.lossStreak - 1) * 500, "回合落敗補助"));
       const t = e ? `${gA[e]}勝利` : "平手",
         n = e === this.match.team ? "is-win" : e ? "is-lose" : "";
-      (this.hud.showCenter(t, `藍隊 ${this.teamScore.blue} : ${this.teamScore.red} 紅隊　${RoundBreak} 秒後開始下一局`, n),
+      (this.hud.showCenter(t, `${why ? why + "　" : ""}藍隊 ${this.teamScore.blue} : ${this.teamScore.red} 紅隊　${RoundBreak} 秒後開始下一局`, n),
         this.audio.playWaveStart());
     }
     updateRulesHud() {
@@ -30977,15 +31320,17 @@ void main() {
       let n;
       if (t) n = `無限模式　藍隊 ${e.blue} : ${e.red} 紅隊\n擊殺 ${this.playerKills}　陣亡 ${this.playerDeaths}`;
       else {
-        const i = Math.max(0, Math.ceil(RoundLimit - this.roundTimer));
-        n = `單局模式・第 ${this.round} 局　藍隊 ${e.blue} : ${e.red} 紅隊\n存活　藍 ${this.roster.aliveOf("blue")}　紅 ${this.roster.aliveOf("red")}　${Math.floor(i / 60)}:${String(i % 60).padStart(2, "0")}`;
+        const B = this.bomb,
+          bm = this.match.rule === "bomb",
+          i = Math.max(0, Math.ceil(bm ? (B.state === "planted" ? B.timer : BombRoundTime - this.roundTimer) : RoundLimit - this.roundTimer));
+        n = `${bm ? "爆破模式" : "單局模式"}・第 ${this.round} 局　藍隊 ${e.blue} : ${e.red} 紅隊\n存活　藍 ${this.roster.aliveOf("blue")}　紅 ${this.roster.aliveOf("red")}　${Math.floor(i / 60)}:${String(i % 60).padStart(2, "0")}`;
       }
       this.hud.setWave(n);
     }
     // 陣亡鏡頭：先倒在地上，單局模式 1.5 秒後改為跟隨存活隊友的第三人稱觀戰
     updateDownCamera(e) {
       const t = this.camera;
-      if (this.match.rule === "round" && this.downTime > 1.5) {
+      if (this.isRoundRule && this.downTime > 1.5) {
         const n = this.roster.members.filter((i) => i.team === this.match.team && !i.isDead && i !== this.playerCombatant);
         if (n.length) {
           const i = n[this.spectateIdx % n.length],

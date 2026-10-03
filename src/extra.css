@@ -72,3 +72,11 @@ body.is-touch .start{place-items:start center}
 .buy__item.is-poor{opacity:.6}
 .buy__item.is-owned{opacity:.45}
 .buy__item.is-owned i::after{content:" ✓";color:#9ef0a4}
+
+/* 爆破模式 */
+.bomb-info{position:fixed;left:50%;top:168px;transform:translateX(-50%);padding:5px 12px;border-radius:6px;background:rgba(10,14,20,.6);color:#ffe08a;font:600 14px/1.3 system-ui,sans-serif;white-space:nowrap;pointer-events:none}
+.bomb-info.is-hot{color:#fff;background:rgba(170,30,20,.78);animation:bombPulse 1s ease-in-out infinite}
+@keyframes bombPulse{50%{background:rgba(220,40,25,.9)}}
+.bomb-bar{position:fixed;left:50%;top:58%;transform:translateX(-50%);width:min(260px,60vw);height:8px;border-radius:4px;background:rgba(0,0,0,.55);overflow:hidden;pointer-events:none}
+.bomb-bar i{display:block;height:100%;width:0;background:#ffcf4a}
+.use-btn{position:fixed;left:50%;top:63%;transform:translateX(-50%);pointer-events:auto;cursor:pointer;background:rgba(10,14,20,.78);color:#fff;border:1px solid rgba(255,207,74,.7);border-radius:8px;padding:10px 18px;font:700 15px/1 system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
