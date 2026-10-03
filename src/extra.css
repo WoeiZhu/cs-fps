@@ -50,3 +50,25 @@ body.is-touch .start{place-items:start center}
 .scope::before{left:0;right:0;top:50%;height:1px}
 .scope::after{top:0;bottom:0;left:50%;width:1px}
 .is-hidden{visibility:hidden!important}
+
+/* 金錢與購買選單 */
+.money{position:fixed;left:28px;bottom:86px;font:700 22px/1 ui-monospace,Menlo,monospace;color:#9ef0a4;text-shadow:0 1px 3px #000;pointer-events:none}
+.money-note{position:fixed;left:28px;bottom:116px;font:600 14px/1 system-ui,sans-serif;color:#ffe08a;text-shadow:0 1px 3px #000;opacity:0;pointer-events:none}
+.money-note.is-on{animation:moneyNote 1.8s ease-out}
+@keyframes moneyNote{0%{opacity:0;transform:translateY(6px)}10%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0;transform:translateY(-8px)}}
+.buy-hint{position:fixed;left:50%;top:128px;transform:translateX(-50%);pointer-events:auto;cursor:pointer;background:rgba(10,14,20,.72);color:#ffe08a;border:1px solid rgba(255,224,138,.5);border-radius:6px;padding:6px 14px;font:600 14px/1.2 system-ui,sans-serif}
+.buy{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));background:rgba(12,16,22,.92);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:14px;display:none;pointer-events:auto;z-index:20;color:#e6edf3;font-family:system-ui,sans-serif}
+.buy.is-open{display:block}
+.buy__title{font-weight:700;margin-bottom:10px}
+.buy__title small{font-weight:400;color:#9aa4ae;font-size:12px}
+.buy__list{display:grid;gap:6px}
+.buy__item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:9px 12px;color:inherit;font:inherit;cursor:pointer}
+.buy__item:hover{background:rgba(125,211,252,.14)}
+.buy__item b{width:22px;height:22px;display:grid;place-items:center;border-radius:4px;background:rgba(255,255,255,.12);font-size:13px}
+.buy__item span{flex:1;display:flex;flex-direction:column;font-weight:600}
+.buy__item em{font-style:normal;font-weight:400;font-size:12px;color:#9aa4ae}
+.buy__item i{font-style:normal;font-family:ui-monospace,Menlo,monospace;color:#9ef0a4}
+.buy__item.is-poor i{color:#f87171}
+.buy__item.is-poor{opacity:.6}
+.buy__item.is-owned{opacity:.45}
+.buy__item.is-owned i::after{content:" ✓";color:#9ef0a4}

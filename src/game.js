@@ -25751,6 +25751,7 @@ void main(){
   const Vi = Mt.player;
   class xq {
     health = Vi.maxHealth;
+    armor = 0;
     damageTaken = 0;
     timeSinceHit = 1 / 0;
     hitThisStep = !1;
@@ -27057,6 +27058,7 @@ void main(){
         spread: { hip: 0.009, ads: 0.003 },
         recoil: { vertical: 0.022, horizontal: 0.008, recovery: 9 },
         moveInacc: 1.2,
+        falloff: 0.95,
         sprayGrow: 0.12,
         range: 120,
         viewModel: { length: 0.26, height: 0.16, width: 0.07, color: 4146768, style: "pistol" },
@@ -27078,6 +27080,7 @@ void main(){
         spread: { hip: 0.007, ads: 0.0025 },
         recoil: { vertical: 0.016, horizontal: 0.006, recovery: 8 },
         moveInacc: 2.6,
+        falloff: 0.98,
         sprayGrow: 0.09,
         pattern: !0,
         range: 200,
@@ -27100,6 +27103,7 @@ void main(){
         spread: { hip: 0.075, ads: 0.05 },
         recoil: { vertical: 0.055, horizontal: 0.02, recovery: 6 },
         moveInacc: 0.25,
+        falloff: 0.8,
         sprayGrow: 0.02,
         range: 45,
         viewModel: { length: 0.7, height: 0.15, width: 0.07, color: 6045747, style: "shotgun" },
@@ -27121,6 +27125,7 @@ void main(){
         spread: { hip: 0.07, ads: 4e-4 },
         recoil: { vertical: 0.09, horizontal: 0.012, recovery: 5 },
         moveInacc: 14,
+        falloff: 0.995,
         sprayGrow: 0,
         scope: 18,
         range: 400,
@@ -27257,7 +27262,7 @@ void main(){
           (m.distance = h.distance));
         const x = h.object.userData;
         ((m.zone = x.hitZone ?? "world"), (m.target = x.damageable ?? null));
-        let u = this.config.damage;
+        let u = this.config.damage * Math.pow(this.config.falloff ?? 0.98, h.distance / 10);
         ((m.lethalHeadshot = !1),
           m.zone === "head"
             ? l
@@ -27482,11 +27487,19 @@ void main(){
     get isSwitching() {
       return this.switchTimer > 0;
     }
+    owned = null;
+    has(i) {
+      return !this.owned || this.owned.has(this.weapons[i]?.config.id);
+    }
     switchTo(e) {
       let t = e;
-      (e === -2
-        ? (t = (this.index + 1) % this.weapons.length)
-        : e === -3 && (t = (this.index - 1 + this.weapons.length) % this.weapons.length),
+      const L = this.weapons.length;
+      if (e === -2 || e === -3) {
+        t = this.index;
+        for (let k = 0; k < L; k++) if (((t = (t + (e === -2 ? 1 : -1) + L) % L), this.has(t))) break;
+      }
+      if (!this.has(t)) return;
+      (0,
         !(t < 0 || t >= this.weapons.length || t === this.index) &&
           (this.current.cancelReload(), (this.index = t), (this.switchTimer = 0.35), this.applyWeapon()));
     }
@@ -28391,6 +28404,13 @@ void main(){
       (this.material.dispose(), this._fsQuad.dispose());
     }
   }
+  const BuyTime = 20,
+    ShopItems = [
+      { id: "armor", name: "防彈衣＋頭盔", desc: "承受傷害減半", price: 1e3 },
+      { id: "shotgun", name: "霰彈槍", desc: "近距離一槍斃命", price: 1200 },
+      { id: "rifle", name: "步槍", desc: "全自動，連射會上飄", price: 2700 },
+      { id: "sniper", name: "狙擊槍", desc: "右鍵開鏡，打身體一槍倒", price: 4750 },
+    ];
   // 調色：微幅對比、飽和、冷暗部暖亮部，加上細微底片顆粒
   class GradePass extends cr {
     constructor() {
@@ -30076,6 +30096,7 @@ void main() {
         (this.scopeEl = document.createElement("div")),
         (this.scopeEl.className = "scope"),
         t.prepend(this.scopeEl),
+        this.buildEconomyUi(t),
         (this.vignetteEl = document.createElement("div")),
         (this.vignetteEl.className = "vignette"),
         t.prepend(this.vignetteEl),
@@ -30104,6 +30125,9 @@ void main() {
     }
     applyMatch(e) {
       ((this.match = e),
+        (this.weapons.owned = null),
+        (this.buyTimer = 0),
+        this.closeBuy(),
         this.restart(),
         this.hud.hideCenter(),
         this.hud.clearKills(),
@@ -30239,6 +30263,93 @@ void main() {
     }
     scoped = !1;
     stepAcc = new Map();
+    money = 0;
+    lossStreak = 0;
+    buyTimer = 0;
+    buyOpen = !1;
+    resetLoadout() {
+      ((this.weapons.owned = new Set(["pistol"])), (this.playerState.armor = 0), this.weapons.has(this.weapons.currentIndex) || this.weapons.switchTo(0));
+    }
+    absorbArmor(d) {
+      const ps = this.playerState;
+      if (ps.armor <= 0) return d;
+      const h = d * 0.5;
+      return ((ps.armor = Math.max(0, ps.armor - (d - h) * 0.6)), h);
+    }
+    earn(v, why) {
+      const m = Math.min(16e3, this.money + v),
+        got = m - this.money;
+      ((this.money = m), got > 0 && this.flashMoney(`+$${got}　${why}`));
+    }
+    flashMoney(t) {
+      ((this.moneyNote.textContent = t), this.moneyNote.classList.remove("is-on"), void this.moneyNote.offsetWidth, this.moneyNote.classList.add("is-on"));
+    }
+    get canBuy() {
+      return this.isTeamRule && this.buyTimer > 0 && !this.playerDown && this.state === "playing";
+    }
+    toggleBuy() {
+      this.buyOpen ? this.closeBuy() : this.canBuy && ((this.buyOpen = !0), this.buyEl.classList.add("is-open"), this.refreshBuy());
+    }
+    closeBuy() {
+      ((this.buyOpen = !1), this.buyEl?.classList.remove("is-open"));
+    }
+    buy(i) {
+      const it = ShopItems[i];
+      if (!it || !this.canBuy) return;
+      const w = this.weapons;
+      if (it.id === "armor" ? this.playerState.armor >= 100 : w.owned?.has(it.id)) return this.flashMoney("已經有了");
+      if (this.money < it.price) return (this.flashMoney("金錢不足"), this.audio.playEmpty());
+      ((this.money -= it.price), this.audio.playPickup(!1));
+      if (it.id === "armor") this.playerState.armor = 100;
+      else {
+        w.owned?.add(it.id);
+        const k = w.weapons.findIndex((x) => x.config.id === it.id),
+          x = w.weapons[k];
+        x && ((x.ammoInMag = x.config.magSize), (x.reserve = x.config.reserveAmmo), x.cancelReload(), w.switchTo(k));
+      }
+      this.refreshBuy();
+    }
+    refreshBuy() {
+      const w = this.weapons;
+      for (let i = 0; i < ShopItems.length; i++) {
+        const it = ShopItems[i],
+          el = this.buyEl.children[1]?.children[i];
+        if (!el) continue;
+        const own = it.id === "armor" ? this.playerState.armor >= 100 : w.owned?.has(it.id);
+        (el.classList.toggle("is-owned", !!own), el.classList.toggle("is-poor", !own && this.money < it.price));
+      }
+    }
+    buildEconomyUi(root) {
+      ((this.moneyEl = document.createElement("div")), (this.moneyEl.className = "money"), root.appendChild(this.moneyEl));
+      ((this.moneyNote = document.createElement("div")), (this.moneyNote.className = "money-note"), root.appendChild(this.moneyNote));
+      ((this.buyHint = document.createElement("button")), (this.buyHint.className = "buy-hint"), root.appendChild(this.buyHint));
+      this.buyHint.addEventListener("click", (ev) => (ev.stopPropagation(), this.toggleBuy()));
+      this.buyHint.addEventListener("touchstart", (ev) => ev.stopPropagation(), { passive: !0 });
+      const b = document.createElement("div");
+      ((b.className = "buy"), (b.innerHTML = '<div class="buy__title">購買選單　<small>按數字鍵或點選，B 關閉</small></div><div class="buy__list"></div>'));
+      ShopItems.forEach((it, i) => {
+        const r = document.createElement("button");
+        ((r.className = "buy__item"), (r.innerHTML = `<b>${i + 1}</b><span>${it.name}<em>${it.desc}</em></span><i>$${it.price}</i>`));
+        (r.addEventListener("click", (ev) => (ev.stopPropagation(), this.buy(i))), r.addEventListener("touchstart", (ev) => ev.stopPropagation(), { passive: !0 }));
+        b.children[1].appendChild(r);
+      });
+      (b.addEventListener("touchstart", (ev) => ev.stopPropagation(), { passive: !0 }), (this.buyEl = b), root.appendChild(b));
+      window.addEventListener("keydown", (ev) => {
+        ev.code === "KeyB" && !ev.repeat && this.toggleBuy();
+      });
+    }
+    updateEconomyUi() {
+      const tr = this.isTeamRule && this.state !== "menu";
+      this.moneyEl.style.display = tr ? "" : "none";
+      if (!tr) return ((this.buyHint.style.display = "none"), this.closeBuy());
+      const a = Math.round(this.playerState.armor),
+        t = `$${this.money}` + (a > 0 ? `　🛡 ${a}` : "");
+      t !== this.lastMoneyText && ((this.lastMoneyText = t), (this.moneyEl.textContent = t), this.buyOpen && this.refreshBuy());
+      const cb = this.canBuy;
+      this.buyHint.style.display = cb && !this.buyOpen ? "" : "none";
+      cb && (this.buyHint.textContent = `B　購買（${Math.ceil(this.buyTimer)}）`);
+      !cb && this.buyOpen && this.closeBuy();
+    }
     updateFootsteps(e) {
       // 敵我腳步聲：跑步才有聲音（蹲走、慢走安靜），有方向與距離衰減
       if (this.state !== "playing") return;
@@ -30282,7 +30393,7 @@ void main() {
       const t = this.input.consumeLook();
       (t.dx !== 0 || t.dy !== 0) && this.rig.applyLook(t.dx, t.dy);
       const n = this.input.consumeWeaponSlot();
-      n !== null && this.weapons.switchTo(n);
+      n !== null && (this.buyOpen ? n >= 0 && this.buy(n) : this.weapons.switchTo(n));
     }
     fixedUpdate(e) {
       const t = this.playerDown ? NeutralInput : this.input.state;
@@ -30324,7 +30435,7 @@ void main() {
       ((this.rig.adsFov = cw.scope || 0), this.rig.setAiming(n), this.weapons.setAiming(n));
       const sc = !!(n && cw.scope && !this.weapons.isSwitching && !this.playerDown && this.rig.currentFov < 40);
       sc !== this.scoped && ((this.scoped = sc), this.scopeEl.classList.toggle("is-on", sc), this.hud.crosshair.classList.toggle("is-hidden", sc));
-      this.updateFootsteps(e);
+      (this.updateFootsteps(e), this.updateEconomyUi());
       const i = Math.min(this.player.horizontalSpeed / Mt.player.walkSpeed, 1.5);
       ((SkyU.time.value += e),
         this.rig.updateBob(i, this.player.grounded, e),
@@ -30382,7 +30493,10 @@ void main() {
     }
     // ===== 遊戲模式：無限模式（3 秒復活）/ 單局模式（陣亡等一方全滅） =====
     startTeamMatch() {
-      ((this.teamScore = { blue: 0, red: 0 }),
+      ((this.money = this.match.rule === "infinite" ? 1e3 : 800),
+        (this.lossStreak = 0),
+        this.resetLoadout(),
+        (this.teamScore = { blue: 0, red: 0 }),
         (this.round = 0),
         (this.playerKills = 0),
         (this.playerDeaths = 0),
@@ -30453,7 +30567,7 @@ void main() {
         this.audio.playWaveStart());
     }
     respawnPlayer(e = !1) {
-      this.playerState.reset();
+      (this.playerState.reset(), (this.buyTimer = BuyTime), this.match.rule === "infinite" && (this.money = Math.max(this.money, 1e3)));
       for (const n of this.weapons.weapons)
         ((n.ammoInMag = n.config.magSize),
           (n.reserve = n.config.infiniteReserve ? 1 / 0 : n.config.reserveAmmo),
@@ -30472,6 +30586,7 @@ void main() {
         e || this.hud.hideCenter());
     }
     onPlayerDown() {
+      (this.resetLoadout(), this.closeBuy());
       ((this.playerDown = !0), (this.downTime = 0), this.playerDeaths++, (this.spectateIdx = 0));
       const e = this.lastPlayerAttacker;
       (this.hud.addKill(e?.name ?? "敵人", e?.team ?? RA(this.match.team), "你", this.match.team, !1, !0),
@@ -30488,13 +30603,14 @@ void main() {
         e.team !== this.match.team && (this.score += e.kind === "ranged" ? 150 : 100);
         return;
       }
-      (n && e.team !== this.match.team && (this.playerKills++, (this.score += e.kind === "ranged" ? 150 : 100)),
+      (n && e.team !== this.match.team && (this.playerKills++, (this.score += e.kind === "ranged" ? 150 : 100), this.earn(300, "擊殺")),
         this.hud.addKill(t?.name ?? "流彈", t?.team ?? RA(e.team), e.name ?? KindName[e.kind], e.team, i, n),
         this.match.rule === "infinite" &&
           ((this.teamScore[RA(e.team)] += 1),
           this.respawnQueue.push({ team: e.team, kind: e.kind, t: RespawnDelay })));
     }
     rulesFixedUpdate(e) {
+      (this.buyTimer > 0 && (this.buyTimer -= e) <= 0 && this.closeBuy());
       for (const n of this.roster.members) (n.spawnShield ?? 0) > 0 && (n.spawnShield -= e);
       if (((this.roundBanner ?? 0) > 0 && (this.roundBanner -= e) <= 0 && !this.playerDown && !this.roundOver && this.hud.hideCenter(), this.playerDown)) {
         this.downTime += e;
@@ -30525,6 +30641,9 @@ void main() {
     }
     endRound(e) {
       ((this.roundOver = !0), (this.roundEndTimer = RoundBreak), e && (this.teamScore[e] += 1));
+      e === this.match.team
+        ? ((this.lossStreak = 0), this.earn(3250, "回合勝利"))
+        : ((this.lossStreak = Math.min((this.lossStreak ?? 0) + 1, 4)), this.earn(1400 + (this.lossStreak - 1) * 500, "回合落敗補助"));
       const t = e ? `${gA[e]}勝利` : "平手",
         n = e === this.match.team ? "is-win" : e ? "is-lose" : "";
       (this.hud.showCenter(t, `藍隊 ${this.teamScore.blue} : ${this.teamScore.red} 紅隊　${RoundBreak} 秒後開始下一局`, n),
@@ -30588,7 +30707,7 @@ void main() {
     onBulletHit(e, t, n) {
       if (e === this.playerCombatant) {
         ((this.lastPlayerAttacker = n.shooter),
-          this.playerState.takeDamage(n.damage),
+          this.playerState.takeDamage(this.absorbArmor(n.damage)),
           this.hud.showHitDirection(this.screenAngle(-n.dir.x, -n.dir.z)),
           (this.rig.recoilPitch += 0.012 + Math.random() * 0.012),
           (this.rig.recoilYaw += (Math.random() - 0.5) * 0.03),
