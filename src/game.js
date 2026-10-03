@@ -26043,25 +26043,28 @@ void main(){
     },
     // 參考 CS：紅隊像游擊隊（卡其、橄欖、頭套），藍隊像反恐小組（深藍灰、黑色防彈背心、戰術頭盔）
     SoldierPalette = {
+      // 紅隊：淺沙漠迷彩＋紅色頭巾；藍隊：深海軍藍制服＋黑背心＋藍色頭盔標記，遠看也分得出來
       red: {
-        uniform: 0x6f634b,
-        pants: 0x5b5543,
-        vest: 0x4f4636,
-        pouch: 0x5f5541,
-        helmet: 0x5a5040,
-        hood: 0x2a2622,
-        band: 0xb8332a,
-        pack: 0x4b4334,
+        uniform: 0x9c8862,
+        pants: 0x8c7a52,
+        vest: 0x6e5c3c,
+        pouch: 0x7d6a48,
+        helmet: 0x8a7650,
+        hood: 0x8e2219,
+        band: 0xe0402e,
+        pack: 0x6e5c3c,
+        camo: 1,
       },
       blue: {
-        uniform: 0x3a4351,
-        pants: 0x313844,
-        vest: 0x23272d,
-        pouch: 0x2d3239,
-        helmet: 0x2b3039,
-        hood: 0x23272d,
-        band: 0x2f7de1,
-        pack: 0x2a2e35,
+        uniform: 0x283a63,
+        pants: 0x22325a,
+        vest: 0x16191f,
+        pouch: 0x1f242d,
+        helmet: 0x1c2a45,
+        hood: 0x16191f,
+        band: 0x3d8bff,
+        pack: 0x1a1e26,
+        camo: 2,
       },
       boots: 0x2b2620,
       sole: 0x161412,
@@ -26087,9 +26090,10 @@ void main(){
     const pos = [],
       nor = [],
       col = [],
+      cam = [],
       idx = [];
     let off = 0;
-    for (const [g0, p, s, r, hex] of parts) {
+    for (const [g0, p, s, r, hex, cm] of parts) {
       (sgP.set(p[0], p[1], p[2]),
         sgS.set(s[0], s[1], s[2]),
         sgQ.setFromEuler(sgE.set(r?.[0] ?? 0, r?.[1] ?? 0, r?.[2] ?? 0)),
@@ -26101,7 +26105,8 @@ void main(){
       for (let i = 0; i < pa.count; i++)
         (pos.push(pa.getX(i), pa.getY(i), pa.getZ(i)),
           nor.push(na.getX(i), na.getY(i), na.getZ(i)),
-          col.push(sgC.r, sgC.g, sgC.b));
+          col.push(sgC.r, sgC.g, sgC.b),
+          cam.push(cm ?? 0));
       const ix = g.getIndex();
       if (ix) for (let i = 0; i < ix.count; i++) idx.push(ix.getX(i) + off);
       else for (let i = 0; i < pa.count; i++) idx.push(i + off);
@@ -26112,6 +26117,7 @@ void main(){
       out.setAttribute("position", new Bt(pos, 3)),
       out.setAttribute("normal", new Bt(nor, 3)),
       out.setAttribute("color", new Bt(col, 3)),
+      out.setAttribute("camo", new Bt(cam, 1)),
       out.setIndex(idx),
       out.computeBoundingSphere(),
       out
@@ -26205,9 +26211,10 @@ void main(){
             );
         sniper
           ? parts.push(
-              [P.dome, [0, 0.13, 0.005], [0.105, 0.095, 0.112], null, T.helmet],
-              [P.rbox, [0, 0.14, -0.125], [0.14, 0.01, 0.07], [0.2, 0, 0], T.helmet],
-              [P.rbox, [0, 0.122, -0.002], [0.215, 0.016, 0.225], null, T.helmet],
+              [P.dome, [0, 0.13, 0.005], [0.105, 0.095, 0.112], null, ct ? T.helmet : T.hood],
+              [P.rbox, [0, 0.14, -0.125], [0.14, 0.01, 0.07], [0.2, 0, 0], ct ? T.helmet : T.hood],
+              [P.rbox, [0, 0.122, -0.002], [0.215, 0.016, 0.225], null, ct ? T.helmet : T.hood],
+              [P.rbox, [0, 0.2, 0.0], [0.1, 0.012, 0.1], null, T.band],
             )
           : ct
             ? parts.push(
@@ -26221,6 +26228,7 @@ void main(){
                 [P.rbox, [-0.11, 0.09, 0.004], [0.045, 0.08, 0.08], null, C.gear],
                 [P.box, [-0.1, 0.055, -0.05], [0.008, 0.008, 0.08], [0, 0.5, 0], C.dark],
                 [P.rbox, [0, 0.225, 0.02], [0.14, 0.012, 0.06], null, T.band],
+                [P.rbox, [0, 0.135, 0.004], [0.262, 0.022, 0.276], null, T.band],
               )
             : parts.push([P.rbox, [0, 0.105, 0.015], [0.2, 0.022, 0.2], null, shade(T.hood, 1.3)]);
         break;
@@ -26283,19 +26291,25 @@ void main(){
       default:
         parts = [[P.box, [0, 0, 0], [0.1, 0.1, 0.1], null, 16711935]];
     }
+    for (const q of parts) (q[4] === T.uniform || q[4] === T.pants) && (q[5] = T.camo);
+    // 背心織帶（MOLLE）：前後各三條深色橫帶
+    if (part === "spine")
+      for (const y of [0.2, 0.27, 0.34])
+        parts.push([P.box, [0, y, -0.15], [0.29, 0.012, 0.012], null, shade(T.vest, 0.6)], [P.box, [0, y + 0.02, 0.144], [0.29, 0.012, 0.012], null, shade(T.vest, 0.6)]);
     return ((g = mergeSoldierParts(parts)), SoldierGeoCache.set(key, g), g);
   }
   const SoldierMat = new mt({ vertexColors: !0, roughness: 0.86, metalness: 0.04 });
   // 布料細節：細顆粒織紋＋大塊磨損，讓衣服不像塑膠
   SoldierMat.onBeforeCompile = (sh) => {
     ((sh.vertexShader = sh.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vSPos;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvSPos = position;")),
+      .replace("#include <common>", "#include <common>\nvarying vec3 vSPos;\nattribute float camo;\nvarying float vCamo;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvSPos = position;\nvCamo = camo;")),
       (sh.fragmentShader = sh.fragmentShader
         .replace(
           "#include <common>",
           `#include <common>
 varying vec3 vSPos;
+varying float vCamo;
 float sHash(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float sNoise(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(mix(sHash(i), sHash(i+vec3(1,0,0)), f.x), mix(sHash(i+vec3(0,1,0)), sHash(i+vec3(1,1,0)), f.x), f.y),
@@ -26304,7 +26318,17 @@ float sNoise(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
         .replace(
           "#include <color_fragment>",
           `#include <color_fragment>
-diffuseColor.rgb *= 0.9 + 0.1 * sHash(floor(vSPos * 260.0)) + 0.12 * (sNoise(vSPos * 14.0) - 0.5);`,
+diffuseColor.rgb *= 0.9 + 0.1 * sHash(floor(vSPos * 260.0)) + 0.12 * (sNoise(vSPos * 14.0) - 0.5);
+if (vCamo > 0.5 && vCamo < 1.5) {
+  // 沙漠三色迷彩
+  float c1 = sNoise(vSPos * 7.0 + 1.7), c2 = sNoise(vSPos * 13.0 + 5.3);
+  diffuseColor.rgb *= mix(1.0, 0.62, smoothstep(0.5, 0.54, c1));
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.66, 0.5), smoothstep(0.58, 0.62, c2));
+} else if (vCamo > 1.5) {
+  // 藍隊：細格數位紋
+  vec3 q = floor(vSPos * 60.0);
+  diffuseColor.rgb *= 0.92 + 0.14 * step(0.7, sHash(q));
+}`,
         )));
   };
   const ikD = new E(),
@@ -30530,6 +30554,12 @@ void main() {
         t.prepend(this.scopeEl),
         this.buildEconomyUi(t),
         this.buildBombUi(t),
+        (this.markerRoot = document.createElement("div")),
+        (this.markerRoot.className = "mates"),
+        t.prepend(this.markerRoot),
+        (this.xidEl = document.createElement("div")),
+        (this.xidEl.className = "xid"),
+        t.appendChild(this.xidEl),
         (this.rotateEl = document.createElement("div")),
         (this.rotateEl.className = "rotate-hint"),
         (this.rotateEl.innerHTML = '<div class="rotate-hint__icon">📱</div><b>請把手機轉成橫向</b><span>轉過來後遊戲會自動繼續</span>'),
@@ -30708,6 +30738,55 @@ void main() {
     stepAcc = new Map();
     rotateOn = !1;
     rotatePaused = !1;
+    mateEls = [];
+    idTick = 0;
+    idRay = new Yf();
+    idV = new E();
+    idF = new E();
+    // CS 式敵我辨識：隊友頭上顯示隊伍色箭頭與名字（穿牆可見）；準星對到人時顯示敵／友
+    updateTeamMarkers() {
+      const show = this.isTeamRule && this.state !== "menu" && !this.scoped,
+        mates = show ? this.enemies.enemies.filter((b) => b.hp > 0 && b.team === this.match.team) : [],
+        W = window.innerWidth,
+        H = window.innerHeight,
+        cls = this.match.team === "red" ? "mate is-red" : "mate";
+      for (; this.mateEls.length < mates.length; ) {
+        const el = document.createElement("div");
+        ((el.innerHTML = "<i></i><span></span>"), this.markerRoot.appendChild(el), this.mateEls.push(el));
+      }
+      for (let k = 0; k < this.mateEls.length; k++) {
+        const el = this.mateEls[k],
+          b = mates[k];
+        if (!b) {
+          el.style.display = "none";
+          continue;
+        }
+        const v = this.idV.set(b.position.x, b.position.y + 2.05, b.position.z).project(this.camera);
+        if (v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1) {
+          el.style.display = "none";
+          continue;
+        }
+        const d = b.position.distanceTo(this.player.position);
+        ((el.style.display = ""),
+          el.className !== cls && (el.className = cls),
+          (el.style.transform = `translate(${((v.x * 0.5 + 0.5) * W).toFixed(1)}px, ${((-v.y * 0.5 + 0.5) * H).toFixed(1)}px)`),
+          (el.style.opacity = d > 45 ? "0.55" : "0.95"));
+        const nm = d < 22 ? (b.name ?? "隊友") : "";
+        el.lastChild.textContent !== nm && (el.lastChild.textContent = nm);
+      }
+      if (!show || ++this.idTick % 3) return show || this.setCrosshairId(null);
+      (this.rig.getForward(this.idF), this.idRay.set(this.camera.position, this.idF), (this.idRay.far = 90));
+      const h = this.idRay.intersectObjects(this.raycastTargets, !1)[0],
+        t = h?.object.userData.damageable;
+      this.setCrosshairId(t && t.team && t.hp > 0 ? t : null);
+    }
+    setCrosshairId(t) {
+      const k = t ? (t.team === this.match.team ? "friend" : "enemy") : "";
+      if (k === this.idKind && t === this.idTarget) return;
+      ((this.idKind = k), (this.idTarget = t));
+      (this.hud.crosshair.classList.toggle("is-enemy", k === "enemy"), this.hud.crosshair.classList.toggle("is-friend", k === "friend"));
+      ((this.xidEl.className = "xid" + (k ? " is-" + k : "")), (this.xidEl.textContent = k === "friend" ? `隊友　${t.name ?? ""}` : k === "enemy" ? "敵人" : ""));
+    }
     // 直向時蓋上「請轉橫向」並暫停；轉回橫向自動繼續
     updateOrientation() {
       if (!TouchMode) return;
@@ -31105,7 +31184,7 @@ void main() {
       ((this.rig.adsFov = cw.scope || 0), this.rig.setAiming(n), this.weapons.setAiming(n));
       const sc = !!(n && cw.scope && !this.weapons.isSwitching && !this.playerDown && this.rig.currentFov < 40);
       sc !== this.scoped && ((this.scoped = sc), this.scopeEl.classList.toggle("is-on", sc), this.hud.crosshair.classList.toggle("is-hidden", sc));
-      (this.updateFootsteps(e), this.updateEconomyUi(), this.updateBombUi(e), this.updateOrientation());
+      (this.updateFootsteps(e), this.updateEconomyUi(), this.updateBombUi(e), this.updateOrientation(), this.updateTeamMarkers());
       const i = Math.min(this.player.horizontalSpeed / Mt.player.walkSpeed, 1.5);
       ((SkyU.time.value += e),
         this.rig.updateBob(i, this.player.grounded, e),

@@ -89,3 +89,14 @@ body.is-touch .start{place-items:start center}
 @keyframes rotHint{0%,20%{transform:rotate(0)}50%,80%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
 .ios-tip{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#7dd3fc1a;border:1px solid #7dd3fc55;color:#cfe8f7;font:400 13px/1.5 system-ui,sans-serif}
 .ios-tip b{display:block;color:#7dd3fc;margin-bottom:2px}
+
+/* 敵我辨識 */
+.mates{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.mate{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;margin-left:-40px;width:80px;pointer-events:none;will-change:transform}
+.mate i{width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:10px solid #3d8bff;filter:drop-shadow(0 0 2px #000)}
+.mate span{order:-1;font:600 11px/1.2 system-ui,sans-serif;color:#9cc4ff;text-shadow:0 1px 2px #000;white-space:nowrap}
+.mate.is-red i{border-top-color:#ff5a45}.mate.is-red span{color:#ffb1a6}
+.crosshair.is-enemy i{background:#ff3b30}
+.crosshair.is-friend i{background:#4da3ff}
+.xid{position:fixed;left:50%;top:calc(50% + 26px);transform:translateX(-50%);font:700 13px/1 system-ui,sans-serif;text-shadow:0 1px 3px #000;pointer-events:none;white-space:nowrap}
+.xid.is-enemy{color:#ff5a45}.xid.is-friend{color:#7db8ff}
