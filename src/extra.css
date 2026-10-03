@@ -1,0 +1,39 @@
+.bloodfx{position:absolute;inset:0;opacity:0;pointer-events:none;background:radial-gradient(ellipse at center,#5a000000 40%,#6e0505 78%,#3c0000f2 100%);mix-blend-mode:multiply;transition:opacity .2s ease-out}
+.dmgdir{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0;pointer-events:none}
+.dmgdir i{position:absolute;left:-70px;top:-170px;width:140px;height:40px;border-radius:50%/100% 100% 0 0;border-top:6px solid #ff3a2ee6;filter:drop-shadow(0 0 6px #ff0000)}
+.centermsg{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);text-align:center;opacity:0;transition:opacity .25s;text-shadow:0 2px 10px rgba(0,0,0,.95);pointer-events:none}
+.centermsg.is-visible{opacity:1}
+.centermsg b{display:block;font:700 40px/1.1 Segoe UI,system-ui,sans-serif;letter-spacing:.14em;color:var(--ink)}
+.centermsg span{display:block;margin-top:8px;font:500 15px/1.4 Segoe UI,system-ui,sans-serif;letter-spacing:.08em;opacity:.85}
+.centermsg.is-dead b{color:#f87171}.centermsg.is-win b{color:#7dd3fc}.centermsg.is-lose b{color:#f87171}.centermsg.is-round b{color:#fbbf24}
+.centermsg.is-spectate{top:auto;bottom:90px;transform:translate(-50%)}.centermsg.is-spectate b{font-size:20px}
+.killfeed{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none}
+.killfeed__row{padding:4px 10px;font:600 13px/1.3 Segoe UI,system-ui,sans-serif;background:#080c12b3;border-radius:3px;transition:opacity .8s}
+.killfeed__row.is-me{border:1px solid #fbbf24b3}.killfeed__row.is-old{opacity:0}
+.killfeed__row i{font-style:normal;margin:0 8px;font-size:11px;opacity:.7}
+.killfeed__row .t-blue{color:#60a5fa}.killfeed__row .t-red{color:#f87171}
+/* ===== 觸控操作（手機／平板） ===== */
+html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}#app,.touchui{touch-action:none}.start,.overlay{touch-action:pan-y}
+.touchui{position:fixed;inset:0;display:none;z-index:5;-webkit-tap-highlight-color:transparent}
+.touchui.is-visible{display:block}
+.tstick{position:absolute;width:112px;height:112px;margin:-56px 0 0 -56px;border-radius:50%;border:2px solid #e6edf340;background:#0b111a40;opacity:0;pointer-events:none;transition:opacity .1s}
+.tstick.is-active{opacity:1}.tstick.is-sprint{border-color:#fbbf24b3}
+.tstick i{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:50%;background:#e6edf366}
+.tb{position:absolute;border-radius:50%;border:2px solid #e6edf352;background:#0b111a59;color:#e6edf3d9;font:700 14px/1 system-ui,sans-serif;letter-spacing:.06em;touch-action:none;-webkit-tap-highlight-color:transparent;padding:0}
+.tb.is-down{background:#7dd3fc66;border-color:#7dd3fc}.tb.is-on{background:#7dd3fc40;border-color:#7dd3fcb3;color:#7dd3fc}
+.tb--fire{right:calc(28px + env(safe-area-inset-right));bottom:84px;width:84px;height:84px;font-size:16px;border-color:#f87171a6;background:#7f1d1d59}
+.tb--fire.is-down,.tb--fire2.is-down{background:#f8717180}
+.tb--fire2{left:calc(26px + env(safe-area-inset-left));top:34%;width:62px;height:62px;border-color:#f87171a6;background:#7f1d1d59}
+.tb--aim{right:calc(124px + env(safe-area-inset-right));bottom:116px;width:58px;height:58px}
+.tb--jump{right:calc(36px + env(safe-area-inset-right));bottom:184px;width:58px;height:58px}
+.tb--crouch{right:calc(116px + env(safe-area-inset-right));bottom:40px;width:54px;height:54px}
+.tb--reload{right:calc(108px + env(safe-area-inset-right));bottom:192px;width:52px;height:52px;font-size:12px}
+.tb--switch{right:calc(36px + env(safe-area-inset-right));top:70px;width:52px;height:52px;font-size:12px}
+.tb--pause{left:calc(14px + env(safe-area-inset-left));top:12px;width:42px;height:42px;font-size:13px;border-radius:8px}
+body.is-touch .health{left:auto;right:calc(50% + 24px);bottom:10px;width:150px}
+body.is-touch .health__text{font-size:22px}
+body.is-touch .ammo{right:auto;left:calc(50% + 24px);bottom:10px;text-align:left}
+body.is-touch .ammo__mag{font-size:30px}
+body.is-touch .reload{margin-left:0}
+body.is-touch .killfeed{top:auto;bottom:60px;right:50%;transform:translateX(50%);align-items:center}
+body.is-touch .start{place-items:start center}
